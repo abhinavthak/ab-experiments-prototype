@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A/B Experiments — University CMS · Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&amp;display=swap">
+<style>
+body{margin:0;background:#F8FAFC;color:#111827;font-family:Poppins,system-ui,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:56px 20px}
+h1{font-size:34px;font-weight:600;margin:0 0 8px;letter-spacing:-.01em}
+p{color:#4B5563;font-size:16px;margin:0 0 36px;line-height:1.5}
+h2{font-size:12px;font-weight:600;letter-spacing:.08em;color:#6B7280;text-transform:uppercase;margin:32px 0 12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{display:flex;flex-direction:column;gap:6px;background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:18px 20px;text-decoration:none;color:#111827}
+.card:hover{border-color:#2563EB;box-shadow:0 0 0 3px #DBEAFE}
+.t{font-weight:600;font-size:15.5px}.m{font-size:12.5px;color:#6B7280;font-family:ui-monospace,monospace}
+.start{display:inline-flex;align-items:center;height:48px;padding:0 22px;border-radius:10px;background:#2563EB;color:#fff;font-weight:500;text-decoration:none}
+.start:hover{background:#1D4ED8}
+</style>
+</head>
+<body>
+<main>
+<h1>A/B Experiments — University CMS</h1>
+<p>Clickable prototype of page A/B testing in the University CMS. Start from the Experiments list and follow the links, or open any screen below. Every screen has a bar at the bottom to step through the flow.</p>
+<a class="start" href="experiments.html">Start prototype</a>
+<h2>Main flow</h2>
+<div class="grid"><a class="card" href="pages.html"><span class="t">0 · Pages list</span><span class="m">pages.html</span></a><a class="card" href="experiments.html"><span class="t">1 · Experiments list (Growth)</span><span class="m">experiments.html</span></a><a class="card" href="create-experiment.html"><span class="t">2 · Create A/B test — primary metric dropdown</span><span class="m">create-experiment.html</span></a><a class="card" href="add-variant.html"><span class="t">3 · Page editor — new variant</span><span class="m">add-variant.html</span></a><a class="card" href="setup.html"><span class="t">4 · Experiment setup</span><span class="m">setup.html</span></a><a class="card" href="variant-editor.html"><span class="t">5 · Page editor — switch variant, set default</span><span class="m">variant-editor.html</span></a><a class="card" href="results.html"><span class="t">6 · Results</span><span class="m">results.html</span></a></div>
+<h2>Rules &amp; edge cases</h2>
+<div class="grid"><a class="card" href="rules.html"><span class="t">R · Rules by state</span><span class="m">rules.html</span></a><a class="card" href="edge-page-variants.html"><span class="t">E1 · Page variants — edge cases</span><span class="m">edge-page-variants.html</span></a><a class="card" href="edge-create.html"><span class="t">E2 · Create experiment — edge cases</span><span class="m">edge-create.html</span></a><a class="card" href="edge-start-run.html"><span class="t">E3 · Start &amp; run — edge cases</span><span class="m">edge-start-run.html</span></a><a class="card" href="edge-stop-archive-delete.html"><span class="t">E4 · Stop, archive &amp; delete</span><span class="m">edge-stop-archive-delete.html</span></a><a class="card" href="edge-list-states.html"><span class="t">E5 · Experiments list — states</span><span class="m">edge-list-states.html</span></a></div>
+</main>
+</body>
+</html>

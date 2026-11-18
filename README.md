@@ -1,31 +1,92 @@
-# A/B Experiments — University CMS (prototype)
+# A/B Experiments — University CMS (working prototype)
 
-A clickable, static prototype of page A/B testing for the University CMS.
+A working, in-browser prototype of page A/B testing for the University CMS. It's built on GrowthBook's experiment model and follows the "A/B Experiments — University CMS" design.
 
 **Live:** https://abhinavthak.github.io/ab-experiments-prototype/
 
-## Screens
+Everything runs in your browser. Changes are saved in this browser only (localStorage), and traffic and conversions are **simulated**. Use **Reset** in the bottom bar to start over.
 
-**Main flow**
-0. Pages list (`pages.html`)
-1. Experiments list (`experiments.html`)
-2. Create A/B test, with the primary metric dropdown (`create-experiment.html`)
-3. Page editor: new variant (`add-variant.html`)
-4. Experiment setup (`setup.html`)
-5. Page editor: switch variant, set default (`variant-editor.html`)
-6. Results (`results.html`)
+## What works
 
-**Rules and edge cases**
-- Rules by state (`rules.html`)
-- E1 Page variants (`edge-page-variants.html`)
-- E2 Create experiment (`edge-create.html`)
-- E3 Start and run (`edge-start-run.html`)
-- E4 Stop, archive and delete (`edge-stop-archive-delete.html`)
-- E5 Experiments list states (`edge-list-states.html`)
+**Experiments list**
+- Summary for the last 30 days: running now, started, ended, winners shipped.
+- Search with syntax: `is:running`, `is:watched`, `owner:`, `tag:`, `page:`, `key:`.
+- Status tabs with counts: All, Running, Drafts, Stopped, Archived.
+- Filters for Page, Owner and Tags. Sorting.
+- Watch (star). Watched experiments are listed first.
+- Status pills with day-of-run progress, and a live verdict per row (Ship now, Unhealthy…).
+- State-aware "⋯" menu that explains why disabled actions are unavailable.
+- 20 rows per page. Empty and no-match states.
 
-## Using it
-- Start at `index.html` or **Start prototype**, then click through. Links between screens work as designed.
-- The bar at the bottom of each screen steps through the screens (← / →, or the arrow keys) and returns to **All screens**.
-- Controls that aren't wired up show "Not linked in this prototype".
+**Create A/B test**
+- Page picker that only allows live pages with 2+ variants and no running or scheduled test.
+- Primary metric, which disables metrics the page can't produce. Secondary metrics.
+- Hypothesis, variants, tags, owner.
+- Tracking key generated from the name; must be unique.
+- All required-field errors are shown at once. Asks before discarding typed input.
 
-Plain HTML and CSS with no build step. Fonts come from Google Fonts.
+**Experiment lifecycle** (following *Rules by state*)
+- **Start:** a checklist of blockers and warnings, then a confirm that lists what locks once started.
+- **Schedule, reschedule, unschedule.** A scheduled start is skipped and the test returns to Draft if checks fail at start time.
+- **Stop and record a result** (Won, Lost, No clear winner, Did not finish), choose the winning variant, and choose the page default.
+- **Automatic stop** on the stop date, then *Record result*.
+- **Archive and unarchive. Delete**, blocked while running or scheduled. **Duplicate**, which makes a new draft with a suffixed key and the page's current default as Control.
+- **Field locks while running.** Variants, split, primary metric, targeting and tracking key lock. Name, hypothesis, secondary and guardrail metrics, and stop date stay editable.
+
+**Setup**
+- Variants and traffic split: split evenly, add or remove page variants.
+- Targeting: audience, device, UTM source, rollout %, exclude existing leads. Sticky assignment.
+- Metrics: primary, secondary and guardrails. Lead attribution.
+- Analysis: Bayesian or Frequentist, sequential testing, CUPED.
+- Stop date, and preview links per variant.
+
+**Results**
+- Visitors, conversions, best variant and top secondary metric.
+- Decision: *Ship now*, *Roll back*, *N days left*, or *Collecting data*, with **Stop & make B the default**.
+- Per-variant table: conversion rate, relative lift with a 95% interval bar, and chance to beat Control or a p-value.
+- All devices / Mobile / Desktop.
+- Cumulative chart over time. Secondary and guardrail tables.
+- Banners: collecting data, traffic-split mismatch, variant edited mid-test, guardrail failing, no visitors, stop date reached.
+
+**Health**
+- Sample ratio mismatch (chi-square) check with expected vs observed visitors per variant.
+- Traffic flow, guardrails, mid-test edits.
+- Visitors per day chart.
+
+**History & comments**
+- Full change log, including automatic events. Comments.
+
+**Pages and page editor**
+- Pages list: search, Live/Draft filter, the running experiment per page.
+- New page. Publish or move to draft, and delete. Both are blocked during a test.
+- Variants: new variant (copy of the default, of another variant, or of a draft page; names must be unique; up to 5 variants).
+- Rename, duplicate, delete. Delete is blocked for the default or a variant in a running test.
+- **Set as default:** locked during a test. Draft experiments switch their Control.
+- Section editing with "Same as A" / "Edited in B" states, and *Reset to A*. Edits during a running test are logged on its Results.
+
+**Metrics:** the catalog and custom metrics.
+**Settings:** switch user and role (Admin / Editor / Viewer), the default stats engine, the **simulated clock** (+1 day / +7 days, to watch tests progress, start and stop), and reset demo data.
+
+## Statistics
+
+Normal approximations, as in GrowthBook's engines:
+- **Bayesian:** chance to beat Control and a 95% credible interval on relative lift (delta method).
+- **Frequentist:** two-sided p-value and 95% confidence interval. Sequential testing uses an always-valid boundary that is wider early on.
+- **CUPED:** modelled as a fixed variance reduction.
+- **SRM:** chi-square test against the planned split, flagged at p < 0.001.
+- **Decision:** a test isn't called before 7 days. *Ship now* requires a significant win that doesn't fail any guardrail.
+
+Simulated data is deterministic for each experiment and day. Unseeded effects are zero, so any difference you see there is noise.
+
+## Original design screens
+
+The static screens from the design canvas (main flow, rules and edge cases) are in [`design/`](design/index.html).
+
+## Code
+
+Plain HTML, CSS and JavaScript ES modules, with no build step.
+- `js/store.js`: data and persistence.
+- `js/sim.js`: traffic simulation.
+- `js/stats.js` and `js/analysis.js`: statistics.
+- `js/rules.js`: what's allowed in each state.
+- `js/views/*`: the screens.
