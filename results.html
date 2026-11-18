@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6 · Results · A/B Experiments prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#F8FAFC}
+a{color:#2563EB;text-decoration:none}a:hover{color:#1D4ED8}
+.nav{display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:10px;color:#374151;font-size:15px;font-weight:500}
+.nav:hover{background:#F3F4F6;color:#111827}
+.nav-on{background:#EFF4FF;color:#2563EB}
+.navh{font-size:12px;font-weight:600;letter-spacing:.08em;color:#6B7280;margin:22px 14px 6px}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.btn{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 18px;border-radius:10px;border:1px solid #E5E7EB;background:#fff;color:#111827;font:500 15px Poppins,sans-serif;cursor:pointer;box-sizing:border-box;white-space:nowrap}
+.btn:hover{background:#F9FAFB}
+.btn-p{background:#2563EB;border-color:#2563EB;color:#fff}
+.btn-p:hover{background:#1D4ED8}
+.inp{height:44px;border:1px solid #D1D5DB;border-radius:10px;padding:0 14px;font:400 15px Poppins,sans-serif;color:#111827;background:#fff;box-sizing:border-box;width:100%}
+</style>
+<link rel="stylesheet" href="proto.css">
+</head>
+<body>
+<div style="font-family: Poppins, system-ui, sans-serif; color: #111827; background: #F8FAFC; display: flex; flex-wrap: wrap; min-height: 100%; width: 100%">
+<aside style="flex: 0 0 260px; background: #FFFFFF; border-right: 1px solid #E5E7EB; display: flex; flex-direction: column; box-sizing: border-box">
+<div style="display: flex; align-items: center; gap: 12px; padding: 22px 20px; border-bottom: 1px solid #E5E7EB">
+<div style="width: 36px; height: 36px; border-radius: 9px; background: #2563EB; color: #fff; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></div>
+<div style="font-weight: 600; font-size: 17px">University CMS</div>
+</div>
+<nav aria-label="Main" style="padding: 4px 12px 24px; display: flex; flex-direction: column; flex: 1">
+<div class="navh">WEBSITE</div>
+<a href="pages.html" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg><span style="flex: 1">Pages</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span style="flex: 1">Widget Blocks</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg><span style="flex: 1">Widget Management</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span style="flex: 1">Live Lectures</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span style="flex: 1">File Bucket</span></a>
+<div class="navh">GROWTH</div>
+<a href="experiments.html" class="nav nav-on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3"/><path d="M7.5 15h9"/></svg><span style="flex: 1">Experiments</span><span style="font-size: 11px; font-weight: 600; color: #1D4ED8; background: #DBEAFE; padding: 2px 8px; border-radius: 999px">New</span></a>
+<div class="navh">LEADS</div>
+<a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg><span style="flex: 1">Lead Payments</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg><span style="flex: 1">MOOC Registrations</span></a>
+<div class="navh">LEAD FORMS</div>
+<a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span style="flex: 1">Form Builder</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span style="flex: 1">Custom Form</span></a>
+<div class="navh">ADMIN</div>
+<a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span style="flex: 1">University Settings</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M16 4.5a3.5 3.5 0 0 1 0 7M21 20a6 6 0 0 0-4-5.6"/></svg><span style="flex: 1">Users</span></a><a href="#" class="nav"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span style="flex: 1">Core Web Vitals</span></a>
+</nav>
+<div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-top: 1px solid #E5E7EB">
+<div style="width: 40px; height: 40px; border-radius: 50%; background: #111827; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600">AT</div>
+<div style="flex: 1"><div style="font-size: 15px; font-weight: 500">Abhinav Thakur</div><div style="font-size: 13px; color: #6B7280">admin</div></div>
+<button type="button" aria-label="Log out" style="background: none; border: 0; color: #6B7280; cursor: pointer; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></button>
+</div>
+</aside>
+<main style="flex: 999 1 560px; min-width: 0; padding: 32px 40px 56px; box-sizing: border-box">
+<div style="max-width: 1240px; margin: 0 auto">
+<div style="font-size: 14px; color: #4B5563; margin-bottom: 10px"><a href="experiments.html">Experiments</a> / BBA</div>
+<div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 8px">
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap"><h1 style="margin: 0; font-size: 30px; font-weight: 600">Online BBA — banner &amp; sticky CTA</h1><span style="display:inline-flex; align-items:center; gap:6px; font-size: 13px; font-weight: 600; color: #166534; background: #DCFCE7; padding: 4px 12px; border-radius: 999px"><span style="width:8px; height:8px; border-radius:50%; background:#16A34A"></span>Running</span></div>
+<div style="display: flex; gap: 10px"><button type="button" class="btn btn-p">Stop experiment</button></div>
+</div>
+<div style="font-size: 14px; color: #4B5563; margin-bottom: 24px">Started Nov 8, 2026 · day 9 of 21 · updated 12 min ago · sample data</div>
+<nav aria-label="Experiment" style="display: flex; gap: 28px; border-bottom: 1px solid #E5E7EB; margin-bottom: 28px"><a href="setup.html" style="padding: 14px 2px; font-size: 15px; font-weight: 500; color: #4B5563; border-bottom: 2px solid transparent">Overview</a><a href="results.html" style="padding: 14px 2px; font-size: 15px; font-weight: 600; color: #2563EB; border-bottom: 2px solid #2563EB">Results</a><a href="#" style="padding: 14px 2px; font-size: 15px; font-weight: 500; color: #4B5563; border-bottom: 2px solid transparent">Health</a></nav>
+<div style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px">
+<div style="flex: 1 1 200px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 20px"><div style="font-size: 14px; color: #4B5563">Visitors in test</div><div style="font-size: 28px; font-weight: 600; margin: 4px 0 2px">12,480</div><div style="font-size: 13px; color: #4B5563">Across 3 variants</div></div>
+<div style="flex: 1 1 200px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 20px"><div style="font-size: 14px; color: #4B5563">Leads (primary metric)</div><div style="font-size: 28px; font-weight: 600; margin: 4px 0 2px">1,004</div><div style="font-size: 13px; color: #4B5563">Lead form submitted</div></div>
+<div style="flex: 1 1 200px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 20px"><div style="font-size: 14px; color: #4B5563">Best variant</div><div style="font-size: 28px; font-weight: 600; margin: 4px 0 2px"><span style="color:#2563EB">B · +17.7%</span></div><div style="font-size: 13px; color: #4B5563">97% chance to beat Control</div></div>
+<div style="flex: 1 1 200px; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 20px"><div style="font-size: 14px; color: #4B5563">Top secondary</div><div style="font-size: 28px; font-weight: 600; margin: 4px 0 2px"><span style="color:#2563EB">B · +32%</span></div><div style="font-size: 13px; color: #4B5563">Enroll Now clicks vs Control</div></div>
+</div>
+
+<section style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; background: #EFF4FF; border: 1px solid #BFDBFE; border-radius: 14px; padding: 18px 22px; margin-bottom: 20px">
+<span style="color:#2563EB"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a3 3 0 0 0 4 3M16 6h4v1a3 3 0 0 1-4 3M12 13v4M8 20h8"/></svg></span>
+<div style="flex: 1 1 400px"><div style="font-size: 16px; font-weight: 600; color: #1E3A8A">B is likely the winner, but keep it running until [MIN SAMPLE] visitors per variant</div><div style="font-size: 14px; color: #1E40AF; margin-top: 2px">Declaring B makes it the page&#39;s default, so every visitor sees it. A stays as a variant you can switch back to.</div></div>
+<button type="button" class="btn btn-p">Stop &amp; make B the default</button>
+</section>
+
+<section style="background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; margin-bottom: 20px; overflow: hidden">
+<div style="display:flex; flex-wrap: wrap; justify-content: space-between; align-items:center; gap: 12px; padding: 20px 24px 12px"><h2 style="margin:0; font-size: 18px; font-weight: 600">Primary metric · Lead form submitted</h2><div style="display: inline-flex; background: #F3F4F6; border-radius: 10px; padding: 4px; gap: 2px; flex-wrap: wrap"><button type="button" style="border: 0; border-radius: 8px; padding: 0 14px; height: 38px; font: 500 14px Poppins; background: #fff; color: #111827; box-shadow: 0 1px 2px rgba(0,0,0,.08)">All devices</button><button type="button" style="border: 0; border-radius: 8px; padding: 0 14px; height: 38px; font: 500 14px Poppins; background: none; color: #4B5563">Mobile</button><button type="button" style="border: 0; border-radius: 8px; padding: 0 14px; height: 38px; font: 500 14px Poppins; background: none; color: #4B5563">Desktop</button></div></div>
+<div style="overflow-x: auto"><table style="width: 100%; border-collapse: collapse; font-size: 15px; min-width: 760px">
+<thead><tr style="background:#F9FAFB"><th scope="col" style="padding: 12px 16px; text-align:left; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">VARIANT</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">VISITORS</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">LEADS</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">CONV. RATE</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">VS CONTROL</th><th scope="col" style="padding: 12px 16px; text-align:left; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">CHANCE TO BEAT CONTROL</th></tr></thead>
+<tbody>
+<tr style="">
+<td style="padding: 16px; border-top: 1px solid #EEF0F3"><div style="display:flex; align-items:center; gap:10px"><span style="width: 26px; height: 26px; border-radius: 7px; background: #4B5563; color: #fff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">A</span><span style="font-weight:500">Control</span></div></td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">4,160</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">312</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600">7.50%</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600; color:#4B5563">—</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; min-width: 200px"><span style="color:#4B5563">Baseline</span></td></tr>
+<tr style="background: #F5F8FF;">
+<td style="padding: 16px; border-top: 1px solid #EEF0F3"><div style="display:flex; align-items:center; gap:10px"><span style="width: 26px; height: 26px; border-radius: 7px; background: #2563EB; color: #fff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">B</span><span style="font-weight:500">Short banner + sticky CTA</span><span style="display:inline-flex; align-items:center; gap:4px; font-size: 12px; font-weight: 600; color: #1E40AF; background: #DBEAFE; padding: 2px 8px; border-radius: 999px; margin-left: 8px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H4v1a3 3 0 0 0 4 3M16 6h4v1a3 3 0 0 1-4 3M12 13v4M8 20h8"/></svg>Leading</span></div></td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">4,170</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">368</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600">8.82%</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600; color:#15803D">+17.7%</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; min-width: 200px"><div style="display:flex; align-items:center; gap:10px"><div style="flex:1; height: 8px; background:#E5E7EB; border-radius:999px; min-width: 80px"><div style="width:97%; height:8px; background:#2563EB; border-radius:999px"></div></div><span style="font-weight:600; width: 44px; text-align:right">97%</span></div></td></tr>
+<tr style="">
+<td style="padding: 16px; border-top: 1px solid #EEF0F3"><div style="display:flex; align-items:center; gap:10px"><span style="width: 26px; height: 26px; border-radius: 7px; background: #C2410C; color: #fff; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0">C</span><span style="font-weight:500">Video banner</span></div></td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">4,150</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right">324</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600">7.81%</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; text-align:right; font-weight:600; color:#15803D">+4.1%</td>
+<td style="padding: 16px; border-top: 1px solid #EEF0F3; min-width: 200px"><div style="display:flex; align-items:center; gap:10px"><div style="flex:1; height: 8px; background:#E5E7EB; border-radius:999px; min-width: 80px"><div style="width:64%; height:8px; background:#C2410C; border-radius:999px"></div></div><span style="font-weight:600; width: 44px; text-align:right">64%</span></div></td></tr>
+</tbody></table></div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px">
+<section style="flex: 3 1 520px; min-width: 0; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 20px 24px">
+<div style="display:flex; flex-wrap:wrap; justify-content: space-between; gap: 12px; margin-bottom: 12px"><h2 style="margin:0; font-size: 18px; font-weight: 600">Conversion rate over time</h2>
+<div style="display:flex; flex-wrap:wrap; gap: 16px; font-size: 13px; color: #374151"><span style="display:inline-flex; align-items:center; gap:8px"><span style="width: 22px; height: 0; border-top: 3px dashed #4B5563; display:inline-block"></span>A Control</span><span style="display:inline-flex; align-items:center; gap:8px"><span style="width: 22px; height: 0; border-top: 3px solid #2563EB; display:inline-block"></span>B Short banner</span><span style="display:inline-flex; align-items:center; gap:8px"><span style="width: 22px; height: 0; border-top: 3px solid #C2410C; display:inline-block"></span>C Video banner</span></div></div>
+<svg viewBox="0 0 760 260" width="100%" role="img" aria-label="Cumulative lead conversion rate by day: B leads at 8.8%, C 7.8%, Control 7.5%" style="display:block"><line x1="44" x2="744" y1="192.7" y2="192.7" stroke="#E5E7EB"/><text x="36" y="196.7" text-anchor="end" font-size="12" fill="#4B5563" font-family="Poppins">7%</text><line x1="44" x2="744" y1="122.0" y2="122.0" stroke="#E5E7EB"/><text x="36" y="126.0" text-anchor="end" font-size="12" fill="#4B5563" font-family="Poppins">8%</text><line x1="44" x2="744" y1="51.3" y2="51.3" stroke="#E5E7EB"/><text x="36" y="55.3" text-anchor="end" font-size="12" fill="#4B5563" font-family="Poppins">9%</text><text x="44.0" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D1</text><text x="131.5" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D2</text><text x="219.0" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D3</text><text x="306.5" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D4</text><text x="394.0" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D5</text><text x="481.5" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D6</text><text x="569.0" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D7</text><text x="656.5" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D8</text><text x="744.0" y="252" text-anchor="middle" font-size="12" fill="#4B5563" font-family="Poppins">D9</text>
+<polyline points="44.0,129.1 131.5,150.3 219.0,164.4 306.5,150.3 394.0,157.3 481.5,164.4 569.0,157.3 656.5,157.3 744.0,157.3" fill="none" stroke="#4B5563" stroke-width="2.5" stroke-dasharray="6 4"/>
+<polyline points="44.0,178.5 131.5,150.3 219.0,122.0 306.5,129.1 394.0,136.1 481.5,143.2 569.0,136.1 656.5,136.1 744.0,135.4" fill="none" stroke="#C2410C" stroke-width="2.5"/>
+<polyline points="44.0,93.7 131.5,58.4 219.0,44.3 306.5,65.5 394.0,58.4 481.5,72.5 569.0,65.5 656.5,65.5 744.0,64.1" fill="none" stroke="#2563EB" stroke-width="3"/></svg>
+</section>
+<section style="flex: 2 1 380px; min-width: 0; background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; overflow: hidden">
+<h2 style="margin:0; font-size: 18px; font-weight: 600; padding: 20px 24px 12px">Secondary metrics</h2>
+<div style="overflow-x:auto"><table style="width:100%; border-collapse: collapse; font-size: 14px">
+<thead><tr style="background:#F9FAFB"><th scope="col" style="padding: 12px 16px; text-align:left; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">METRIC</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">A</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">B</th><th scope="col" style="padding: 12px 16px; text-align:right; font-size: 12px; font-weight: 600; letter-spacing: .06em; color: #4B5563">C</th></tr></thead>
+<tbody>
+<tr><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3">Enroll Now click</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">12.5%</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">16.5%</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">13.0%</td></tr>
+<tr><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3">Payment completed</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">18</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">23</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">19</td></tr>
+<tr><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3">LCP (p75)</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">2.1s</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">2.2s</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; color:#B45309; font-weight:600"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; vertical-align: -2px; margin-right: 4px"><path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17v.5"/></svg>2.9s</td></tr>
+<tr><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3">Bounce rate</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">48.2%</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">44.9%</td><td style="padding: 12px 16px; border-top: 1px solid #EEF0F3; text-align:right; ">47.6%</td></tr>
+</tbody></table></div>
+</section>
+</div>
+</div>
+</main>
+</div>
+<nav class="proto-bar" aria-label="Prototype"><a class="proto-home" href="index.html">All screens</a><a href="variant-editor.html" aria-label="Previous screen">&larr;</a><span class="proto-title">6 · Results</span><a href="rules.html" aria-label="Next screen">&rarr;</a></nav>
+<script src="proto.js"></script>
+</body>
+</html>
