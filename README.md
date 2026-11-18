@@ -70,11 +70,10 @@ Everything runs in your browser. Changes are saved in this browser only (localSt
 ## GrowthBook features added (v2)
 
 **Experiment flow**
-- **Create wizard**: Overview (type, template, name, key, hypothesis, tags, owner, custom fields) → Page & variants (split) → Targeting → Metrics → Analysis (engine, sequential, CUPED, duration, power estimate) → Review with the launch checklist.
+- **Create wizard**: Overview (type, name, key, hypothesis, tags, owner, custom fields) → Page & variants (split) → Targeting → Metrics → Analysis (engine, sequential, CUPED, duration, power estimate) → Review with the launch checklist.
 - **Launch checklist**: automatic checks plus manual QA items (managed in Settings; required items block Start).
 - **Make changes while running**: raise the rollout in the same phase, or start a new phase (new split, rollout or targeting; visitors re-randomized). Phases are listed on Overview and selectable on Results.
 - **Stop** records a result, a written conclusion and the page default. **Analyze a past experiment** imports a test by its dates.
-- **Templates**: save any experiment as a template and start new ones from it.
 
 **Experiment types**: A/B tests and **multi-armed bandits** (even split for 2 days, then daily Thompson-style re-weighting with a 2% floor; chance-to-be-best and traffic-share chart).
 

@@ -388,27 +388,6 @@ export function makeChanges(e) {
   });
 }
 
-export function saveAsTemplate(e) {
-  if (!S.canEdit()) return toast("You need Editor access", "bad");
-  openModal({
-    title: "Save as template",
-    body: `<div class="field"><label for="tp-name">Template name</label><input id="tp-name" name="name" class="inp" value="${esc(e.name.replace(/^[^—]+—\s*/, ""))} template"><div data-err="name"></div></div>
-      <div class="field"><label for="tp-desc">Description <span class="opt">· optional</span></label><input id="tp-desc" name="desc" class="inp"></div>
-      <p class="hint">Saves the type, metrics, analysis settings, targeting, stop date, tags and hypothesis. Not the page or variants.</p>`,
-    footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Save template</button>`,
-    onSubmit: (fd, form) => {
-      const name = String(fd.get("name")).trim();
-      if (!name) return (form.querySelector("[data-err=name]").innerHTML = `<div class="err">Enter a name</div>`);
-      S.get().templates.push({ id: uid("t"), name, desc: String(fd.get("desc")).trim(), type: e.type, primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics],
-        statsEngine: e.statsEngine, sequential: e.sequential, cuped: e.cuped, stopAfterDays: e.stopAfterDays, tags: [...e.tags], hypothesis: e.hypothesis, targeting: structuredClone(e.targeting), activationMetric: e.activationMetric,
-        createdAt: S.now(), ownerId: S.get().currentUserId });
-      S.save();
-      closeModal();
-      toast(`Saved template “${name}”`, "good");
-    },
-  });
-}
-
 export function createReport(e, settings) {
   if (!S.canEdit()) return toast("You need Editor access", "bad");
   const r = { id: uid("r"), expId: e.id, title: `${e.name} — report`, note: "", settings, by: S.get().currentUserId, createdAt: S.now() };
@@ -434,7 +413,6 @@ Object.assign(acts, {
   "exp-watch": (el) => toggleWatch(byId(el)),
   "exp-copykey": (el) => copyText(byId(el).trackingKey),
   "exp-make-changes": (el) => makeChanges(byId(el)),
-  "exp-save-template": (el) => saveAsTemplate(byId(el)),
   "exp-check": (el) => {
     const e = byId(el);
     if (!S.canEdit() || e.archived) return;

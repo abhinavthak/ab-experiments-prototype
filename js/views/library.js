@@ -1,12 +1,11 @@
 // Insights (dashboard, learnings, timeline, metric effects), holdouts,
-// shareable reports and experiment templates.
+// shareable reports.
 import * as S from "../store.js";
 import { acts, go } from "../actions.js";
 import { analyze, statusPill } from "../analysis.js";
 import { icon, pill, avatar, variantChip, openModal, closeModal, confirmModal, emptyRow, callout } from "../ui.js";
 import { esc, fmtDate, fmtInt, fmtPct, fmtLift, DAY, toast, uid, copyText, startOfDay } from "../util.js";
 import { resultsBody, bindResults, defaultRes } from "./detail.js";
-import { openCreate } from "./create.js";
 import { RESULT_LABEL } from "../store.js";
 
 /* ---------- Insights ---------- */
@@ -189,26 +188,8 @@ export function bindReport(root, rr, id) {
   });
 }
 
-/* ---------- Templates ---------- */
-export function renderTemplates() {
-  const st = S.get();
-  const used = (t) => st.experiments.filter((e) => e.templateId === t.id).length;
-  return `<div class="page-head"><div><h1>Experiment templates</h1><div class="sub">Reusable setups, so every test of a kind is measured the same way</div></div></div>
-    <div class="card"><div class="table-wrap"><table class="t" style="min-width:760px"><thead><tr><th>Template</th><th>Type</th><th>Metrics</th><th>Analysis</th><th class="num">Used</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
-    ${st.templates.length ? st.templates.map((t) => `<tr><td><b>${esc(t.name)}</b><div class="small" style="margin:2px 0 0">${esc(t.desc || "")}</div></td><td>${t.type === "bandit" ? "Bandit" : "A/B test"}</td>
-      <td>${esc(S.metric(t.primaryMetric)?.name || "—")}${t.secondaryMetrics?.length ? ` <span class="faint">+${t.secondaryMetrics.length}</span>` : ""}${t.guardrailMetrics?.length ? `<div class="small" style="margin:0">Guardrails: ${t.guardrailMetrics.map((m) => esc(S.metric(m)?.name)).join(", ")}</div>` : ""}</td>
-      <td>${t.statsEngine === "frequentist" ? `Frequentist${t.sequential ? " · sequential" : ""}` : "Bayesian"}${t.cuped ? " · CUPED" : ""}<div class="small" style="margin:0">${t.stopAfterDays ? `${t.stopAfterDays} days` : "Stops manually"}</div></td>
-      <td class="num">${used(t)}</td><td><div class="actions"><button type="button" class="btn xs primary" data-act="tpl-use" data-tid="${t.id}" ${S.canEdit() ? "" : "disabled"}>Use</button><button type="button" class="btn xs" data-act="tpl-delete" data-tid="${t.id}" ${S.canEdit() ? "" : "disabled"}>Delete</button></div></td></tr>`).join("") : emptyRow(6, "No templates yet", "Open an experiment and choose ⋯ → Save as template.")}</tbody></table></div></div>
-    <p class="hint">To make a template, open any experiment and choose ⋯ → Save as template.</p>`;
-}
-
 Object.assign(acts, {
   "ins-tab": (el, rr) => { itab = el.dataset.tab; rr(); },
-  "tpl-use": (el) => openCreate(null, { templateId: el.dataset.tid, type: S.template(el.dataset.tid)?.type || "standard" }),
-  "tpl-delete": (el) => confirmModal({ title: "Delete template?", danger: true, tone: "red", confirm: "Delete", text: `<b>${esc(S.template(el.dataset.tid)?.name)}</b> will be deleted. Experiments made from it keep their settings.`, onConfirm: () => {
-    S.get().templates = S.get().templates.filter((t) => t.id !== el.dataset.tid);
-    S.save();
-  } }),
   "rep-copy": () => copyText(location.href),
   "rep-edit": (el) => {
     const r = S.report(el.dataset.rid);

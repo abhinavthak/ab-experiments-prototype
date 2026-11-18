@@ -124,10 +124,6 @@ function seed(now) {
     { id: "ns_programs", name: "Program page tests", desc: "Visitors are in at most one program-page experiment at a time" },
     { id: "ns_header", name: "Common Header", desc: "Tests that change the shared header block" },
   ];
-  const templates = [
-    { id: "t_banner", name: "Banner test on a lead page", desc: "Lead form as the goal, page speed and bounce as guardrails", type: "standard", primaryMetric: "m_lead", secondaryMetrics: ["m_enroll", "m_brochure"], guardrailMetrics: ["m_lcp", "m_bounce"], statsEngine: "bayesian", stopAfterDays: 21, tags: ["banner"], hypothesis: "Changing the banner to … will increase enquiry form submissions because …", createdAt: d(-60), ownerId: "u_at" },
-    { id: "t_cta", name: "CTA copy test", desc: "Quick 14-day copy test on CTA clicks", type: "standard", primaryMetric: "m_cta", secondaryMetrics: ["m_enroll"], guardrailMetrics: ["m_bounce"], statsEngine: "frequentist", sequential: true, stopAfterDays: 14, tags: ["copy", "cta"], hypothesis: "Copy that … will get more clicks than “Enroll now” because …", createdAt: d(-40), ownerId: "u_tu" },
-  ];
   const customFields = [
     { id: "cf_team", name: "Team", type: "select", options: ["Growth", "Marketing", "Admissions", "Product"], required: false },
     { id: "cf_ticket", name: "Ticket", type: "text", placeholder: "e.g. GROW-123", required: false },
@@ -147,7 +143,7 @@ function seed(now) {
   e4.checklist = { lc_qa: true };
   e3.checklist = { lc_qa: true, lc_form: true, lc_owner: true };
 
-  return { v: 2, launchChecklist, pages, metrics, experiments: exps, savedGroups, namespaces, templates, customFields, holdouts, reports, currentUserId: "u_at", role: "admin",
+  return { v: 2, launchChecklist, pages, metrics, experiments: exps, savedGroups, namespaces, customFields, holdouts, reports, currentUserId: "u_at", role: "admin",
     settings: { ...DEFAULT_SETTINGS }, clockOffsetDays: 0, notices: [], seededAt: now };
 }
 
@@ -196,7 +192,6 @@ export const metric = (id) => state.metrics.find((m) => m.id === id);
 export const canEdit = () => state.role !== "viewer";
 export const savedGroup = (id) => state.savedGroups.find((g) => g.id === id);
 export const namespace = (id) => state.namespaces.find((n) => n.id === id);
-export const template = (id) => state.templates.find((t) => t.id === id);
 export const holdout = (id) => state.holdouts.find((h) => h.id === id);
 export const report = (id) => state.reports.find((r) => r.id === id);
 export const settings = () => state.settings;
@@ -331,7 +326,7 @@ export function newExperimentDraft() {
     id: uid("e"), name: "", trackingKey: "", pageId: null, variantIds: [], weights: [], hypothesis: "", description: "", tags: [], ownerId: state.currentUserId,
     watched: true, coverage: 100, targeting: { audience: "all", device: "all", source: "", excludeLeads: false, conditions: [], savedGroups: [] }, primaryMetric: null,
     assignment: { hashAttribute: state.settings.hashAttribute, fallback: "", sticky: state.settings.stickyDefault }, type: "standard", namespace: null, activationMetric: null,
-    customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [], templateId: null,
+    customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
     secondaryMetrics: [], guardrailMetrics: [], statsEngine: state.settings.statsEngine, sequential: state.settings.sequentialDefault && state.settings.statsEngine === "frequentist", cuped: state.settings.cupedDefault, leadAttribution: true,
     status: "draft", archived: false, scheduledStart: null, stopAfterDays: 21, startedAt: null, endedAt: null, result: null, winnerVariantId: null,
     releasedVariantId: null, stoppedAutomatically: false, midTestEdits: [], comments: [], history: [], sim: null, createdAt: now(), updatedAt: now(),

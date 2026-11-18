@@ -30,7 +30,6 @@ function route() {
   if (a === "holdouts") return { nav: "holdouts", render: Lib.renderHoldouts, title: "Holdouts" };
   if (a === "holdout" && b) return { nav: "holdouts", render: () => Lib.renderHoldout(b), bind: (r, rr) => Lib.bindHoldout(r, rr, b), title: S.holdout(b)?.name };
   if (a === "report" && b) return { nav: "experiments", render: () => Lib.renderReport(b), bind: (r, rr) => Lib.bindReport(r, rr, b), title: S.report(b)?.title };
-  if (a === "templates") return { nav: "templates", render: Lib.renderTemplates, title: "Templates" };
   if (a === "audiences") return { nav: "audiences", render: Aud.renderAudiences, title: "Audiences" };
   if (a === "settings") return { nav: "settings", render: Misc.renderSettings, bind: Misc.bindSettings, title: "Settings" };
   return { nav: "experiments", render: List.render, bind: List.bind, title: "Experiments" };
@@ -38,7 +37,7 @@ function route() {
 
 const NAV = [
   ["WEBSITE", [["pages", "Pages", icon.page(), "#/pages"], ["", "Widget Blocks", icon.grid()], ["", "Widget Management", icon.layers()], ["", "Live Lectures", icon.screen()], ["", "File Bucket", icon.folder()]]],
-  ["GROWTH", [["experiments", "Experiments", icon.flask(), "#/experiments"], ["insights", "Insights", icon.pulse(), "#/insights"], ["holdouts", "Holdouts", icon.layers(), "#/holdouts"], ["metrics", "Metrics", icon.target(), "#/metrics"], ["audiences", "Audiences", icon.users(), "#/audiences"], ["templates", "Templates", icon.form(), "#/templates"]]],
+  ["GROWTH", [["experiments", "Experiments", icon.flask(), "#/experiments"], ["insights", "Insights", icon.pulse(), "#/insights"], ["holdouts", "Holdouts", icon.layers(), "#/holdouts"], ["metrics", "Metrics", icon.target(), "#/metrics"], ["audiences", "Audiences", icon.users(), "#/audiences"]]],
   ["LEADS", [["", "Lead Payments", icon.card()], ["", "MOOC Registrations", icon.cap()]]],
   ["LEAD FORMS", [["", "Form Builder", icon.form()], ["", "Custom Form", icon.form()]]],
   ["ADMIN", [["settings", "Settings", icon.gear(), "#/settings"], ["", "Users", icon.users()], ["", "Core Web Vitals", icon.pulse()]]],

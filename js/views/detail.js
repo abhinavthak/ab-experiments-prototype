@@ -44,7 +44,6 @@ function header(e, tab) {
     menuItem("exp-watch", e.watched ? "Stop watching" : "Watch", { ic: icon.eye() }),
     menuItem("exp-copykey", "Copy tracking key", { ic: icon.copy() }),
     started ? menuItem("exp-report", "Create report", { ic: icon.form(18), disabled: ed }) : "",
-    menuItem("exp-save-template", "Save as template", { ic: icon.layers(18), disabled: ed }),
     menuItem("exp-duplicate", "Duplicate", { ic: icon.copy(), disabled: ed }),
     e.status === "scheduled" && !e.archived ? menuItem("exp-unschedule", "Unschedule", { ic: icon.clock() }) : "",
     e.archived ? menuItem("exp-unarchive", "Unarchive", { ic: icon.archive(), disabled: why(e, "unarchive") }) : menuItem("exp-archive", "Archive", { ic: icon.archive(), disabled: why(e, "archive") }),
@@ -114,7 +113,7 @@ function overview(e) {
       ${e.description ? `<p class="muted" style="margin:0 0 12px">${esc(e.description)}</p>` : ""}
       <div class="row" style="padding:14px;border:1px solid var(--border);border-radius:12px"><span style="color:var(--primary)">${icon.page()}</span><div class="grow"><b>${esc(p?.name || "Deleted page")}</b><div class="small" style="margin:0"><span class="mono">${esc(p?.path || "")}</span> · ${esc(p?.type || "")} · ${p?.sections ?? 0} sections · ~${fmtInt(p?.traffic ?? 0)} visitors/day</div></div>${p ? pill(p.status === "live" ? "green" : "gray", p.status === "live" ? "Live" : "Draft") : ""}</div>
       <p class="hint">While the test runs, the page's default variant can't be changed, and variants in the test can't be deleted. Blocks (like Common Header) are shared by every variant.</p>
-      <div class="row" style="gap:6px">${e.tags.map((x) => `<span class="badge">${esc(x)}</span>`).join("")}${cf.map((f) => `<span class="badge">${esc(f.name)}: ${esc(e.customFields[f.id])}</span>`).join("")}${e.templateId && S.template(e.templateId) ? `<span class="badge">Template: ${esc(S.template(e.templateId).name)}</span>` : ""}</div>
+      <div class="row" style="gap:6px">${e.tags.map((x) => `<span class="badge">${esc(x)}</span>`).join("")}${cf.map((f) => `<span class="badge">${esc(f.name)}: ${esc(e.customFields[f.id])}</span>`).join("")}</div>
     </section>
 
     <section class="card pad">

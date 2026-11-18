@@ -158,7 +158,6 @@ export function render() {
     ? `<div class="split-btn"><button type="button" class="btn primary lg" data-act="exp-new">${icon.plus()} New experiment</button>${menu(icon.down(18), [
         menuItem("exp-new", "A/B test", { ic: icon.flask(18) }),
         menuItem("exp-new-bandit", "Multi-armed bandit", { ic: icon.pulse(18) }),
-        S.get().templates.length ? "<hr>" + S.get().templates.map((t) => menuItem("tpl-use", `From template: ${t.name}`, { ic: icon.form(18), data: `data-tid="${t.id}"` })).join("") : "",
         "<hr>",
         menuItem("exp-import", "Analyze a past experiment", { ic: icon.archive(18) }),
       ].join(""), { label: "More ways to create", cls: "btn primary lg icon-btn" })}</div>`

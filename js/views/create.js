@@ -66,17 +66,7 @@ export function powerTable(e) {
 
 const STEPS = [["basics", "Overview"], ["variants", "Page & variants"], ["targeting", "Targeting"], ["metrics", "Metrics"], ["analysis", "Analysis"], ["review", "Review"]];
 
-function applyTemplate(d, t) {
-  if (!t) return;
-  Object.assign(d, {
-    templateId: t.id, type: t.type || "standard", primaryMetric: t.primaryMetric, secondaryMetrics: [...(t.secondaryMetrics || [])], guardrailMetrics: [...(t.guardrailMetrics || [])],
-    statsEngine: t.statsEngine || d.statsEngine, sequential: !!t.sequential, cuped: !!t.cuped, stopAfterDays: t.stopAfterDays ?? d.stopAfterDays, tags: [...(t.tags || [])],
-    hypothesis: d.hypothesis || t.hypothesis || "", activationMetric: t.activationMetric || null,
-  });
-  if (t.targeting) d.targeting = structuredClone(t.targeting);
-}
-
-export function openCreate(prefPageId, { type = "standard", templateId = null } = {}) {
+export function openCreate(prefPageId, { type = "standard" } = {}) {
   if (!S.canEdit()) {
     toast("You need Editor access to create experiments", "bad");
     return;
@@ -95,7 +85,6 @@ export function openCreate(prefPageId, { type = "standard", templateId = null } 
     d.weights = d.variantIds.map((_, i) => (i === 0 ? 100 - even * (d.variantIds.length - 1) : even));
   };
   setPage(firstOk);
-  applyTemplate(d, S.template(templateId));
   let step = 0;
   let seen = 0;
   let keyTouched = false;
@@ -106,7 +95,6 @@ export function openCreate(prefPageId, { type = "standard", templateId = null } 
       <div class="field"><span class="label">Experiment type</span><div class="type-cards" role="radiogroup" aria-label="Experiment type">
         ${[["standard", "A/B test", "Fixed split. Compare variants against Control and pick a winner with confidence."], ["bandit", "Multi-armed bandit", "Sends more traffic to the best-performing variant each day, to get more conversions while you learn."]]
           .map(([k, t, s]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${s}</span></span></label>`).join("")}</div></div>
-      ${st.templates.length ? `<div class="field"><label for="c-tpl">Start from a template <span class="opt">· optional</span></label><select id="c-tpl" name="template" class="inp"><option value="">No template</option>${st.templates.map((t) => `<option value="${t.id}" ${d.templateId === t.id ? "selected" : ""}>${esc(t.name)}</option>`).join("")}</select><div class="hint">Pre-fills metrics, analysis settings, duration and tags. <a href="#/templates" data-act="modal-close-nav">Manage templates</a></div></div>` : ""}
       <div class="field"><label for="c-name">Experiment name</label><input id="c-name" name="name" class="inp" autocomplete="off" value="${esc(d.name)}" placeholder="e.g. Online BBA — banner &amp; sticky CTA"><div data-err="name"></div></div>
       <div class="field"><label for="c-key">Tracking key</label><input id="c-key" name="key" class="inp mono" autocomplete="off" value="${esc(d.trackingKey)}"><div class="hint">Sent with every exposure and lead. Lowercase letters, numbers and hyphens. Locked once started.</div><div data-err="key"></div></div>
       <div class="field"><label for="c-hyp">Hypothesis ${st.settings.requireHypothesis ? "" : `<span class="opt">· optional</span>`}</label><textarea id="c-hyp" name="hypothesis" class="inp" placeholder="If we … then … because …">${esc(d.hypothesis)}</textarea><div data-err="hypothesis"></div></div>
@@ -306,13 +294,6 @@ export function openCreate(prefPageId, { type = "standard", templateId = null } 
         form.querySelectorAll(".type-cards .check").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked));
         form.querySelector("#modal-title").textContent = `New ${d.type === "bandit" ? "bandit" : "A/B test"} · ${STEPS[step][1]}`;
       }));
-      form.template?.addEventListener("change", () => {
-        collect(form);
-        applyTemplate(d, S.template(form.template.value));
-        if (!form.template.value) d.templateId = null;
-        paint();
-        toast(form.template.value ? "Template applied: metrics, analysis and duration are pre-filled" : "Template removed");
-      });
       form.name.addEventListener("input", () => {
         if (!keyTouched) form.key.value = S.uniqueKey(slugify(form.name.value));
       });
@@ -406,7 +387,7 @@ export function openCreate(prefPageId, { type = "standard", templateId = null } 
         paint();
         return;
       }
-      d.history.push({ at: S.now(), by: st.currentUserId, text: `Created the experiment${d.templateId ? ` from the template “${S.template(d.templateId)?.name}”` : ""}` });
+      d.history.push({ at: S.now(), by: st.currentUserId, text: "Created the experiment" });
       st.experiments.unshift(d);
       S.save();
       closeModal();
