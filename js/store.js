@@ -51,7 +51,7 @@ function seed(now) {
   const ids = (p, keys) => keys.map((k) => p.variants.find((x) => x.key === k).id);
   const base = (o) => ({
     hypothesis: "", description: "", tags: [], ownerId: "u_at", watched: false, coverage: 100,
-    targeting: { audience: "all", device: "all", source: "", excludeLeads: false, conditions: [], savedGroups: [] },
+    targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [], savedGroups: [] },
     assignment: { hashAttribute: "visitor_id", fallback: "", sticky: true }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
     secondaryMetrics: [], guardrailMetrics: [], statsEngine: "bayesian", sequential: false, cuped: false, leadAttribution: true,
@@ -164,6 +164,8 @@ export function load() {
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
   // The sample "Ticket" custom field was removed; drop it from data saved before that.
   state.customFields = (state.customFields || []).filter((f) => f.id !== "cf_ticket");
+  // The free-text "Traffic source" targeting field was removed; UTM rules live in attribute conditions.
+  (state.experiments || []).forEach((e) => { if (e.targeting) delete e.targeting.source; });
   reconcile();
   return state;
 }
@@ -325,7 +327,7 @@ export function reconcile() {
 export function newExperimentDraft() {
   return {
     id: uid("e"), name: "", trackingKey: "", pageId: null, variantIds: [], weights: [], hypothesis: "", description: "", tags: [], ownerId: state.currentUserId,
-    watched: true, coverage: 100, targeting: { audience: "all", device: "all", source: "", excludeLeads: false, conditions: [], savedGroups: [] }, primaryMetric: null,
+    watched: true, coverage: 100, targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [], savedGroups: [] }, primaryMetric: null,
     assignment: { hashAttribute: state.settings.hashAttribute, fallback: "", sticky: state.settings.stickyDefault }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
     secondaryMetrics: [], guardrailMetrics: [], statsEngine: state.settings.statsEngine, sequential: state.settings.sequentialDefault && state.settings.statsEngine === "frequentist", cuped: state.settings.cupedDefault, leadAttribution: true,

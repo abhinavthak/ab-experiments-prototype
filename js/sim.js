@@ -53,7 +53,6 @@ export function targetingFactor(t = {}, e = {}) {
   let f = 1;
   if (t.audience === "new") f *= 0.7;
   if (t.audience === "returning") f *= 0.3;
-  if (t.source) f *= 0.35;
   if (t.excludeLeads) f *= 0.95;
   (t.conditions || []).forEach(() => (f *= 0.6));
   (t.savedGroups || []).forEach((g) => {

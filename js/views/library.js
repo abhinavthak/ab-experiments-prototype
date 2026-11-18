@@ -119,7 +119,7 @@ export function holdoutExperiment(h) {
       return acc + l * (S.page(e.pageId).traffic / traffic);
     }, 0);
   });
-  const targeting = { audience: "all", device: "all", source: "", excludeLeads: false, conditions: [], savedGroups: [] };
+  const targeting = { audience: "all", device: "all", excludeLeads: false, conditions: [], savedGroups: [] };
   return {
     id: h.id, name: h.name, status: h.endedAt ? "stopped" : "holdout", startedAt: h.startedAt, endedAt: h.endedAt, weights: [h.percent, 100 - h.percent], coverage: 100, targeting,
     type: "standard", primaryMetric: h.metrics[0], secondaryMetrics: h.metrics.slice(1), guardrailMetrics: [], activationMetric: null, statsEngine: st.settings.statsEngine, sequential: false, cuped: false,

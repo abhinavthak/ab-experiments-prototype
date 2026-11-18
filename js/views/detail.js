@@ -72,7 +72,7 @@ function header(e, tab) {
 
 /* ---------- Overview ---------- */
 export function targetingSummary(t) {
-  return [t.audience !== "all" ? `${t.audience} visitors` : "All visitors", t.device !== "all" ? `${t.device} only` : "", t.source ? `source ${t.source}` : "", ...(t.conditions || []).map(condText),
+  return [t.audience !== "all" ? `${t.audience} visitors` : "All visitors", t.device !== "all" ? `${t.device} only` : "", ...(t.conditions || []).map(condText),
     ...(t.savedGroups || []).map((g) => `${g.mode === "exclude" ? "excluding" : "only"} ${S.savedGroup(g.id)?.name || "deleted group"}`), t.excludeLeads ? "excluding existing leads" : ""].filter(Boolean).join(" · ");
 }
 
@@ -128,8 +128,7 @@ function overview(e) {
     <section class="card pad">
       <div class="card-head"><div><h2>Targeting &amp; traffic</h2><div class="card-sub">${esc(targetingSummary(t))} · rollout ${e.coverage}%</div></div>${runningLock}</div>
       <div class="row"><div class="grow field"><label for="t-aud">Audience</label><select id="t-aud" class="inp" data-t="audience" ${edV ? "" : "disabled"}>${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="t-dev">Device</label><select id="t-dev" class="inp" data-t="device" ${edV ? "" : "disabled"}>${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
-      <div class="row"><div class="grow field"><label for="t-src">Traffic source · UTM</label><input id="t-src" class="inp" data-t="source" placeholder="Any source" value="${esc(t.source)}" ${edV ? "" : "disabled"}></div>
+        <div class="grow field"><label for="t-dev">Device</label><select id="t-dev" class="inp" data-t="device" ${edV ? "" : "disabled"}>${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="t-cov">Rollout · share of visitors in test</label><div class="pct-input"><input id="t-cov" class="inp" type="number" min="0" max="100" data-coverage value="${e.coverage}" ${edV ? "" : "disabled"}><span>%</span></div></div></div>
       <div class="field"><span class="label">Attribute conditions</span>${conditionEditor(t.conditions || [], { disabled: !edV, prefix: "ov" })}</div>
       <div class="field" data-sg><span class="label">Saved groups</span>${savedGroupPicker(t.savedGroups || [], { disabled: !edV, name: "ovsg" })}</div>

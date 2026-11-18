@@ -3,8 +3,8 @@
 // Also: "Analyze a past experiment" (import), and the power estimate.
 import * as S from "../store.js";
 import { openModal, closeModal, icon, variantChip, callout, tagPicker } from "../ui.js";
-import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng } from "../util.js";
-import { go, checklistHtml } from "../actions.js";
+import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS } from "../util.js";
+import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
 import { targetingFactor } from "../sim.js";
 import { conditionEditor, bindConditions, readConditions, savedGroupPicker, readSavedGroups, namespaceBar, HASH_ATTRS, condText } from "./targeting.js";
@@ -129,7 +129,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const t = d.targeting;
       return `<div class="row"><div class="grow field"><label for="c-aud">Audience</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="c-src">Traffic source · UTM</label><input id="c-src" name="source" class="inp" value="${esc(t.source)}" placeholder="Any source"></div></div>
+</div>
       <div class="field"><span class="label">Attribute conditions</span>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
       <div class="field"><span class="label">Saved groups</span>${savedGroupPicker(t.savedGroups || [])}</div>
       <label class="check" style="margin-bottom:16px"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
@@ -160,24 +160,63 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     review: () => {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
-      const m = S.metric(d.primaryMetric);
       const t = d.targeting;
-      const tgt = [t.audience !== "all" ? `${t.audience} visitors` : "All visitors", t.device !== "all" ? `${t.device} only` : "", t.source ? `source ${t.source}` : "", ...(t.conditions || []).map(condText), ...(t.savedGroups || []).map((g) => `${g.mode === "exclude" ? "excluding" : "only"} ${S.savedGroup(g.id)?.name}`), t.excludeLeads ? "excluding existing leads" : ""].filter(Boolean).join(" · ");
-      const edit = (i) => `<button type="button" class="link-btn" data-goto="${i}">Edit</button>`;
+      const mName = (id) => esc(S.metric(id)?.name || "");
+      const none = (txt = "None") => `<span class="faint">${txt}</span>`;
+      const sec = (title, i, body, cls = "") => `<section class="rv-sec ${cls}"><div class="rv-h"><h3>${title}</h3><button type="button" class="link-btn" data-goto="${i}">Edit</button></div>${body}</section>`;
+      const kv = (k, v) => `<div class="rv-kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
+      const color = (v) => VARIANT_COLORS[Math.max(0, v.key.charCodeAt(0) - 65) % VARIANT_COLORS.length];
+      const who = [t.audience !== "all" ? `${t.audience === "new" ? "New" : "Returning"} visitors` : "", t.device !== "all" ? `${t.device === "mobile" ? "Mobile" : "Desktop"} only` : "", ...(t.conditions || []).map(condText), ...(t.savedGroups || []).map((g) => `${g.mode === "exclude" ? "Excluding" : "Only"} ${S.savedGroup(g.id)?.name}`), t.excludeLeads ? "Excluding existing leads" : ""].filter(Boolean);
+      const pe = powerEstimate(d);
+      const prow = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
+      const owner = S.USERS.find((u) => u.id === d.ownerId)?.name || "";
+
       const checks = S.startChecks(d);
-      return `<dl class="kv review">
-        <dt>Type</dt><dd>${d.type === "bandit" ? "Multi-armed bandit" : "A/B test"} ${edit(0)}</dd>
-        <dt>Name</dt><dd><b>${esc(d.name)}</b> · <span class="mono">${esc(d.trackingKey)}</span> ${edit(0)}</dd>
-        <dt>Hypothesis</dt><dd>${esc(d.hypothesis) || `<span class="faint">None</span>`}</dd>
-        <dt>Page</dt><dd>${esc(p?.name || "")} <span class="mono faint">${esc(p?.path || "")}</span> ${edit(1)}</dd>
-        <dt>Variants</dt><dd>${vs.map((v, i) => `${variantChip(v, true)} ${esc(v.name)}${d.type === "bandit" ? "" : ` · ${d.weights[i]}%`}`).join("<br>")}</dd>
-        <dt>Targeting</dt><dd>${esc(tgt)} · rollout ${d.coverage}%${d.namespace ? ` · namespace ${esc(S.namespace(d.namespace.id)?.name)} ${d.namespace.range.join("–")}%` : ""} ${edit(2)}</dd>
-        <dt>Assignment</dt><dd>${esc(HASH_ATTRS.find(([k]) => k === d.assignment.hashAttribute)?.[1])}${d.assignment.sticky ? " · sticky" : ""}</dd>
-        <dt>Metrics</dt><dd>${m ? `<b>${esc(m.name)}</b>` : `<span class="down">No primary metric</span>`}${d.secondaryMetrics.length ? ` · ${d.secondaryMetrics.length} secondary` : ""}${d.guardrailMetrics.length ? ` · ${d.guardrailMetrics.length} guardrails` : ""}${d.activationMetric ? ` · activation: ${esc(S.metric(d.activationMetric)?.name)}` : ""} ${edit(3)}</dd>
-        <dt>Analysis</dt><dd>${d.statsEngine === "bayesian" ? "Bayesian" : `Frequentist${d.sequential ? " · sequential" : ""}`}${d.cuped ? " · CUPED" : ""} · ${d.stopAfterDays ? `stops after ${d.stopAfterDays} days` : "stops manually"} ${edit(4)}</dd>
-      </dl>
-      <div class="field" style="margin-top:16px"><span class="label">Launch checklist · ${checks.blocked ? "fix these before starting" : "ready to start once created"}</span>${checklistHtml(d, checks.items)}</div>
-      <p class="hint">Creating saves a draft. You can start it, schedule it, or keep editing on its Overview.</p>`;
+      const fix = checks.items.filter((x) => !x.ok && !x.manual);
+      const todo = checks.items.filter((x) => x.manual && (!x.ok || x.warn));
+      const warns = checks.items.filter((x) => x.warn && !x.manual);
+      const passed = checks.items.filter((x) => x.ok && !x.warn);
+      const li = (x, cls, ic) => `<li class="${cls}"><span class="ic" aria-hidden="true">${ic}</span><span>${esc(x.label)}${x.optional ? ` <span class="faint">· optional</span>` : ""}${cls === "bad" && x.fix ? `<span class="rv-fix">${esc(x.fix)}</span>` : ""}</span></li>`;
+
+      return `<div class="rv">
+        <div class="rv-hero">
+          <div class="rv-title">${esc(d.name)}</div>
+          <div class="rv-meta"><span class="badge ${d.type === "bandit" ? "blue" : ""}">${d.type === "bandit" ? "Multi-armed bandit" : "A/B test"}</span><span class="mono">${esc(d.trackingKey)}</span></div>
+        </div>
+        ${fix.length ? callout("bad", `<b>${fix.length} ${fix.length === 1 ? "thing" : "things"} to fix before this can start.</b> You can still save it as a draft.`) : ""}
+
+        <div class="rv-grid">
+          ${sec("Overview", 0, `<p class="rv-hyp">${d.hypothesis ? esc(d.hypothesis) : none("No hypothesis")}</p>
+            ${kv("Owner", esc(owner))}
+            ${kv("Tags", d.tags.length ? d.tags.map((x) => `<span class="badge">${esc(x)}</span>`).join(" ") : none())}`)}
+
+          ${sec("Page &amp; variants", 1, `<div class="rv-page">${esc(p?.name || "")} <span class="mono faint">${esc(p?.path || "")}</span></div>
+            ${d.type === "bandit" ? "" : `<div class="rv-split" aria-hidden="true">${vs.map((v, i) => `<span style="flex:${Number(d.weights[i]) || 0};background:${color(v)}"></span>`).join("")}</div>`}
+            <ul class="rv-vars">${vs.map((v, i) => `<li>${variantChip(v, true)}<span class="grow">${esc(v.name)}${i === 0 ? ` <span class="faint">· control</span>` : ""}</span><b>${d.type === "bandit" ? "auto" : `${d.weights[i]}%`}</b></li>`).join("")}</ul>
+            ${d.type === "bandit" ? `<div class="hint">Traffic shifts daily toward the best variant.</div>` : ""}`)}
+
+          ${sec("Targeting", 2, `${kv("Who", who.length ? who.map(esc).join("<br>") : "All visitors")}
+            ${kv("Rollout", `${d.coverage}% of eligible visitors`)}
+            ${d.namespace ? kv("Namespace", `${esc(S.namespace(d.namespace.id)?.name)} · ${d.namespace.range.join("–")}%`) : ""}`)}
+
+          ${sec("Metrics", 3, `${kv("Primary", d.primaryMetric ? `<b>${mName(d.primaryMetric)}</b>` : `<span class="down">Not selected</span>`)}
+            ${kv("Secondary", d.secondaryMetrics.length ? d.secondaryMetrics.map(mName).join(", ") : none())}
+            ${kv("Guardrails", d.guardrailMetrics.length ? d.guardrailMetrics.map(mName).join(", ") : none())}
+            ${d.activationMetric ? kv("Activation", mName(d.activationMetric)) : ""}`)}
+
+          ${sec("Analysis", 4, `${kv("Statistics", `${d.statsEngine === "bayesian" ? "Bayesian" : `Frequentist${d.sequential ? ", sequential" : ""}`}${d.cuped ? " · CUPED" : ""}`)}
+            ${kv("Stops", d.stopAfterDays ? `After ${d.stopAfterDays} days` : "Manually")}
+            ${prow ? kv("Estimate", `~${prow.days} days to detect a ${fmtPct(d.plannedMde, 0)} lift${d.stopAfterDays && prow.days > d.stopAfterDays ? ` <span class="badge amber">longer than the stop date</span>` : ""}`) : ""}`)}
+
+          <section class="rv-sec">
+            <div class="rv-h"><h3>Launch checklist</h3><span class="faint small">${passed.length} of ${checks.items.length} done</span></div>
+            ${fix.length || warns.length || todo.length ? `<ul class="rv-checks">${fix.map((x) => li(x, "bad", "✕")).join("")}${warns.map((x) => li(x, "warn", "!")).join("")}${todo.map((x) => li(x, "todo", "")).join("")}</ul>` : `<p style="margin:0;color:var(--up)">All checks pass.</p>`}
+            ${todo.length ? `<div class="hint">Manual checks are ticked on the experiment's Overview after you create it.</div>` : ""}
+            ${passed.length ? `<details class="rv-passed"><summary>${passed.length} passed</summary><ul class="rv-checks">${passed.map((x) => li(x, "ok", "✓")).join("")}</ul></details>` : ""}
+          </section>
+        </div>
+        <p class="hint" style="margin:12px 0 0">Creating saves a draft. You can start or schedule it from its page.</p>
+      </div>`;
     },
   };
 
@@ -221,7 +260,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         else if (d.type !== "bandit" && d.weights.some((w) => w <= 0)) errs.split = "Every variant needs some traffic";
       }
     } else if (k === "targeting") {
-      d.targeting = { audience: fd.get("audience"), device: fd.get("device"), source: String(fd.get("source") || "").trim(), excludeLeads: !!fd.get("excludeLeads"), conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form) };
+      d.targeting = { audience: fd.get("audience"), device: fd.get("device"), excludeLeads: !!fd.get("excludeLeads"), conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form) };
       d.coverage = Number(fd.get("coverage"));
       if (!(d.coverage >= 1 && d.coverage <= 100)) errs.coverage = "Enter 1–100";
       const ns = fd.get("ns");
@@ -335,7 +374,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         paint();
       });
       const reach = () => {
-        const tmp = { ...d, targeting: { ...d.targeting, conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form), audience: form.audience.value, source: form.source.value, excludeLeads: form.excludeLeads.checked } };
+        const tmp = { ...d, targeting: { ...d.targeting, conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form), audience: form.audience.value, excludeLeads: form.excludeLeads.checked } };
         const p = S.page(d.pageId);
         const dev = form.device.value === "mobile" ? 0.62 : form.device.value === "desktop" ? 0.38 : 1;
         const daily = (p?.traffic ?? 0) * (Number(form.coverage.value) / 100) * targetingFactor(tmp.targeting, tmp) * dev;
