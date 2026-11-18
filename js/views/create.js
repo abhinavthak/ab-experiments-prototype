@@ -75,7 +75,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   const d = S.newExperimentDraft();
   d.type = type;
   const pages = [...st.pages].sort((a, b) => (eligibility(a) ? 1 : 0) - (eligibility(b) ? 1 : 0));
-  const firstOk = (prefPageId && S.page(prefPageId) && !eligibility(S.page(prefPageId)) && prefPageId) || pages.find((p) => !eligibility(p))?.id || null;
+  const firstOk = (prefPageId && S.page(prefPageId) && prefPageId) || pages.find((p) => !eligibility(p))?.id || null;
   const setPage = (pid) => {
     const p = S.page(pid);
     d.pageId = pid;
@@ -108,9 +108,16 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       return `<div class="field"><label for="c-page">Page to test</label>
         <select id="c-page" name="page" class="inp"><option value="">Choose a page</option>${pages.map((x) => {
           const why = eligibility(x);
-          return `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""} ${why ? "disabled" : ""}>${esc(x.name)} · ${esc(x.path)}${why ? ` — ${why}` : ` — ${x.variants.length} variants`}</option>`;
+          return `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""}>${esc(x.name)} — ${why ? why.toLowerCase() : `${x.variants.length} variants`}</option>`;
         }).join("")}</select>
-        <div class="hint">Only live pages with at least 2 variants and no running or scheduled experiment. Variants are served on the same URL; the CMS swaps sections.</div><div data-err="page"></div></div>
+        ${p ? `<div class="hint mono">${esc(p.path)}</div>` : `<div class="hint">Variants are served on the same URL; the CMS swaps sections.</div>`}<div data-err="page"></div></div>
+      ${(() => {
+        if (!p) return "";
+        const other = S.activeExpOnPage(p.id, d.id);
+        if (other) return callout("warn", `“${esc(other.name)}” is ${other.status} on this page. You can set this up now as a draft and start it once that one ends.`);
+        if (p.status !== "live") return callout("warn", `${esc(p.name)} is a draft page. You can set this up now; publish the page before starting.`);
+        return "";
+      })()}
       ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants ${d.type === "bandit" ? "· arms" : "& split"}</span>
         ${p.variants.map((v) => {
           const i = d.variantIds.indexOf(v.id);
@@ -248,7 +255,8 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       st.customFields.filter((f) => f.required).forEach((f) => !d.customFields[f.id] && (errs[`cf-${f.id}`] = `Enter ${f.name}`));
     } else if (k === "variants") {
       const p = S.page(d.pageId);
-      if (!p || eligibility(p)) errs.page = "Choose a page that can be tested";
+      if (!p) errs.page = "Choose a page";
+      else if (p.variants.length < 2) errs.page = "This page has only its default variant. Add a variant in the page editor first.";
       else {
         const picked = fd.getAll("variant");
         const ids = [p.defaultVariantId, ...p.variants.filter((v) => picked.includes(v.id)).map((v) => v.id)];
