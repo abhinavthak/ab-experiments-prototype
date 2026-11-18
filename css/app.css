@@ -332,3 +332,17 @@ pre.code { background: #0F172A; color: #E2E8F0; border-radius: 10px; padding: 12
 fieldset.card { margin: 0; min-width: 0; }
 fieldset.card[disabled] { opacity: .75; }
 .learning h2 { font-size: 18px; }
+/* Tag multi-select */
+.tagpick { position: relative; }
+.tp-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 44px; padding: 6px 10px; border: 1px solid var(--input); border-radius: 10px; background: var(--card); cursor: text; }
+.tagpick:focus-within .tp-box { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.tp-chip { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 600; padding: 3px 4px 3px 9px; border-radius: 6px; background: var(--primary-bg); color: var(--primary-h); }
+.tp-x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; width: 20px; height: 20px; border-radius: 4px; padding: 0; }
+.tp-x:hover { background: var(--primary-soft); }
+.tp-in { flex: 1; min-width: 90px; border: 0; outline: none; background: none; font-size: 15px; height: 30px; padding: 0 4px; }
+.tp-menu { position: absolute; left: 0; right: 0; top: calc(100% + 6px); max-height: 240px; overflow: auto; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px rgba(17,24,39,.14); padding: 6px; z-index: 40; }
+.tp-opt { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; font-size: 14.5px; color: var(--text); text-align: left; cursor: pointer; }
+.tp-opt:hover, .tp-opt:focus-visible { background: var(--seg); outline: none; }
+.tp-box2 { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--input); border-radius: 5px; font-size: 12px; color: #fff; flex: none; }
+.tp-opt.on .tp-box2 { background: var(--primary); border-color: var(--primary); }
+.tp-empty { padding: 10px; font-size: 14px; color: var(--text-3); }

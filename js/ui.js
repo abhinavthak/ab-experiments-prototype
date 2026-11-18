@@ -130,3 +130,120 @@ export function confirmModal({ title, text, confirm = "Confirm", tone = "blue", 
 export function emptyRow(cols, title, text = "", action = "") {
   return `<tr><td colspan="${cols}"><div class="empty"><h3>${esc(title)}</h3>${text ? `<div>${text}</div>` : ""}${action ? `<div style="margin-top:14px">${action}</div>` : ""}</div></td></tr>`;
 }
+
+// Tag multi-select: pick existing tags or type a new one and press Enter.
+// The selected tags live in a hidden input (comma separated) so forms read them as before.
+const normTag = (t) => String(t).trim().toLowerCase().replace(/,/g, "");
+const knownTags = () => [...new Set(S.get().experiments.flatMap((e) => e.tags || []))].sort();
+
+export function tagPicker({ id, name = "tags", selected = [], placeholder = "Add tags" }) {
+  return `<div class="tagpick" data-tagpick>
+    <input type="hidden" name="${esc(name)}" value="${esc(selected.join(","))}">
+    <div class="tp-box">${selected.map(tpChip).join("")}<input id="${esc(id)}" class="tp-in" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" placeholder="${selected.length ? "" : esc(placeholder)}"></div>
+    <div class="tp-menu" role="listbox" aria-multiselectable="true" hidden></div>
+  </div>`;
+}
+const tpChip = (t) => `<span class="tp-chip">${esc(t)}<button type="button" class="tp-x" data-tag="${esc(t)}" aria-label="Remove ${esc(t)}">×</button></span>`;
+const tpGet = (w) => (w.querySelector("input[type=hidden]").value || "").split(",").filter(Boolean);
+
+function tpSet(w, tags, keepOpen = true) {
+  w.querySelector("input[type=hidden]").value = tags.join(",");
+  const inp = w.querySelector(".tp-in");
+  w.querySelectorAll(".tp-chip").forEach((c) => c.remove());
+  inp.insertAdjacentHTML("beforebegin", tags.map(tpChip).join(""));
+  inp.placeholder = tags.length ? "" : "Add tags";
+  if (keepOpen) tpPaint(w);
+}
+
+function tpPaint(w) {
+  const inp = w.querySelector(".tp-in");
+  const m = w.querySelector(".tp-menu");
+  const q = normTag(inp.value);
+  const sel = tpGet(w);
+  const opts = [...new Set([...knownTags(), ...sel])].filter((t) => !q || t.includes(q));
+  const create = q && !opts.includes(q) ? `<button type="button" class="tp-opt" data-tp-add="${esc(q)}">${icon.plus(16)} Create “${esc(q)}”</button>` : "";
+  m.innerHTML = opts.map((t) => {
+    const on = sel.includes(t);
+    return `<button type="button" class="tp-opt${on ? " on" : ""}" role="option" aria-selected="${on}" data-tp-toggle="${esc(t)}"><span class="tp-box2" aria-hidden="true">${on ? "✓" : ""}</span>${esc(t)}</button>`;
+  }).join("") + create || `<div class="tp-empty">Type a tag and press Enter</div>`;
+  const wasHidden = m.hidden;
+  m.hidden = false;
+  inp.setAttribute("aria-expanded", "true");
+  if (wasHidden) m.scrollIntoView({ block: "nearest" });
+}
+
+function tpClose(w) {
+  const m = w.querySelector(".tp-menu");
+  if (m.hidden) return;
+  m.hidden = true;
+  w.querySelector(".tp-in").setAttribute("aria-expanded", "false");
+}
+
+function tpAdd(w, raw) {
+  const t = normTag(raw);
+  const inp = w.querySelector(".tp-in");
+  inp.value = "";
+  if (!t) return tpPaint(w);
+  const sel = tpGet(w);
+  if (!sel.includes(t)) sel.push(t);
+  tpSet(w, sel);
+}
+
+if (typeof document !== "undefined") {
+document.addEventListener("mousedown", (ev) => {
+  // Keep focus in the input while clicking an option.
+  if (ev.target.closest(".tp-menu")) ev.preventDefault();
+});
+document.addEventListener("click", (ev) => {
+  document.querySelectorAll("[data-tagpick]").forEach((w) => { if (!w.contains(ev.target)) tpClose(w); });
+  const w = ev.target.closest("[data-tagpick]");
+  if (!w) return;
+  const x = ev.target.closest(".tp-x");
+  const tog = ev.target.closest("[data-tp-toggle]");
+  const add = ev.target.closest("[data-tp-add]");
+  if (x) tpSet(w, tpGet(w).filter((t) => t !== x.dataset.tag), !w.querySelector(".tp-menu").hidden);
+  else if (tog) {
+    const t = tog.dataset.tpToggle;
+    const sel = tpGet(w);
+    tpSet(w, sel.includes(t) ? sel.filter((s) => s !== t) : [...sel, t]);
+    w.querySelector(".tp-in").value = "";
+    tpPaint(w);
+  } else if (add) tpAdd(w, add.dataset.tpAdd);
+  else if (ev.target.closest(".tp-box")) { w.querySelector(".tp-in").focus(); tpPaint(w); }
+});
+document.addEventListener("focusin", (ev) => {
+  if (ev.target.classList?.contains("tp-in")) tpPaint(ev.target.closest("[data-tagpick]"));
+});
+document.addEventListener("focusout", (ev) => {
+  const w = ev.target.closest?.("[data-tagpick]");
+  if (w && ev.target.classList.contains("tp-in")) {
+    if (ev.target.value.trim()) tpAdd(w, ev.target.value);
+    setTimeout(() => { if (!w.contains(document.activeElement)) tpClose(w); }, 0);
+  }
+});
+document.addEventListener("input", (ev) => {
+  if (!ev.target.classList?.contains("tp-in")) return;
+  const w = ev.target.closest("[data-tagpick]");
+  if (ev.target.value.includes(",")) tpAdd(w, ev.target.value.replace(/,/g, ""));
+  else tpPaint(w);
+});
+document.addEventListener("keydown", (ev) => {
+  if (!ev.target.classList?.contains("tp-in")) return;
+  const w = ev.target.closest("[data-tagpick]");
+  const m = w.querySelector(".tp-menu");
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    const q = normTag(ev.target.value);
+    if (q) tpAdd(w, q);
+  } else if (ev.key === "Backspace" && !ev.target.value) {
+    const sel = tpGet(w);
+    if (sel.length) tpSet(w, sel.slice(0, -1));
+  } else if (ev.key === "Escape" && !m.hidden) {
+    ev.stopImmediatePropagation();
+    tpClose(w);
+  } else if (ev.key === "ArrowDown" && !m.hidden) {
+    ev.preventDefault();
+    m.querySelector("button")?.focus();
+  }
+});
+}

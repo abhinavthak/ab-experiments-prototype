@@ -2,7 +2,7 @@
 //   Overview → Page & variants → Targeting → Metrics → Analysis → Review.
 // Also: "Analyze a past experiment" (import), and the power estimate.
 import * as S from "../store.js";
-import { openModal, closeModal, icon, variantChip, callout } from "../ui.js";
+import { openModal, closeModal, icon, variantChip, callout, tagPicker } from "../ui.js";
 import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng } from "../util.js";
 import { go, checklistHtml } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
@@ -99,7 +99,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       <div class="field"><label for="c-key">Tracking key</label><input id="c-key" name="key" class="inp mono" autocomplete="off" value="${esc(d.trackingKey)}"><div class="hint">Sent with every exposure and lead. Lowercase letters, numbers and hyphens. Locked once started.</div><div data-err="key"></div></div>
       <div class="field"><label for="c-hyp">Hypothesis ${st.settings.requireHypothesis ? "" : `<span class="opt">· optional</span>`}</label><textarea id="c-hyp" name="hypothesis" class="inp" placeholder="If we … then … because …">${esc(d.hypothesis)}</textarea><div data-err="hypothesis"></div></div>
       <div class="field"><label for="c-desc">Description <span class="opt">· optional</span></label><textarea id="c-desc" name="description" class="inp" style="min-height:64px">${esc(d.description)}</textarea></div>
-      <div class="row"><div class="grow field"><label for="c-tags">Tags <span class="opt">· comma separated</span></label><input id="c-tags" name="tags" class="inp" value="${esc(d.tags.join(", "))}" placeholder="banner, mobile"></div>
+      <div class="row"><div class="grow field"><label for="c-tags">Tags <span class="opt">· optional</span></label>${tagPicker({ id: "c-tags", selected: d.tags })}</div>
         <div class="grow field"><label for="c-owner">Owner</label><select id="c-owner" name="owner" class="inp">${S.USERS.map((u) => `<option value="${u.id}" ${u.id === d.ownerId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div></div>
       ${customFieldInputs(d)}`,
     variants: () => {

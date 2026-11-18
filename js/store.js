@@ -103,7 +103,7 @@ function seed(now) {
   exps.forEach((e) => {
     if (e.startedAt && !e.phases.length) e.phases = [{ start: e.startedAt, end: e.endedAt, weights: [...e.weights], coverage: e.coverage, targeting: structuredClone(e.targeting), reason: "Started" }];
   });
-  e1.customFields = { cf_team: "Growth", cf_ticket: "GROW-412" };
+  e1.customFields = { cf_team: "Growth" };
   e2.customFields = { cf_team: "Growth" };
   exps.forEach((e) => {
     e.history.push({ at: e.createdAt, by: e.ownerId, text: "Created the experiment" });
@@ -126,7 +126,6 @@ function seed(now) {
   ];
   const customFields = [
     { id: "cf_team", name: "Team", type: "select", options: ["Growth", "Marketing", "Admissions", "Product"], required: false },
-    { id: "cf_ticket", name: "Ticket", type: "text", placeholder: "e.g. GROW-123", required: false },
   ];
   const holdouts = [
     { id: "h_h2", name: "H2 2026 holdout", desc: "5% of program-page visitors never see experiment variants, so we can measure the combined impact of everything we ship.", percent: 5, pageIds: [bba.id, py.id, dsa.id], metrics: ["m_lead", "m_enroll", "m_payment"], status: "running", startedAt: d(-60), endedAt: null, ownerId: "u_at", seed: 99 },
@@ -163,6 +162,8 @@ export function load() {
   }
   if (!state || state.v !== 2) state = seed(Date.now());
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
+  // The sample "Ticket" custom field was removed; drop it from data saved before that.
+  state.customFields = (state.customFields || []).filter((f) => f.id !== "cf_ticket");
   reconcile();
   return state;
 }

@@ -2,7 +2,7 @@ import * as S from "../store.js";
 import { analyze, statusPill, metricBlock, statOpts } from "../analysis.js";
 import { can, why } from "../rules.js";
 import { acts, checklistHtml, createReport } from "../actions.js";
-import { icon, pill, variantChip, avatar, menu, menuItem, callout, lock, openModal, closeModal } from "../ui.js";
+import { icon, pill, variantChip, avatar, menu, menuItem, callout, lock, openModal, closeModal, tagPicker } from "../ui.js";
 import { esc, fmtDate, fmtDateTime, fmtInt, fmtPct, fmtLift, timeAgo, DAY, daysBetween, toast, uid, VARIANT_COLORS, copyText } from "../util.js";
 import { lineChart } from "../chart.js";
 import * as Sim from "../sim.js";
@@ -685,7 +685,7 @@ Object.assign(acts, {
       body: `<div class="field"><label for="ei-name">Experiment name</label><input id="ei-name" name="name" class="inp" value="${esc(e.name)}"><div data-err="name"></div></div>
         <div class="field"><label for="ei-hyp">Hypothesis</label><textarea id="ei-hyp" name="hypothesis" class="inp">${esc(e.hypothesis)}</textarea></div>
         <div class="field"><label for="ei-desc">Description <span class="opt">· optional</span></label><textarea id="ei-desc" name="description" class="inp">${esc(e.description)}</textarea></div>
-        <div class="row"><div class="grow field"><label for="ei-tags">Tags</label><input id="ei-tags" name="tags" class="inp" value="${esc(e.tags.join(", "))}"></div>
+        <div class="row"><div class="grow field"><label for="ei-tags">Tags</label>${tagPicker({ id: "ei-tags", selected: e.tags })}</div>
         <div class="grow field"><label for="ei-owner">Owner</label><select id="ei-owner" name="owner" class="inp">${S.USERS.map((u) => `<option value="${u.id}" ${u.id === e.ownerId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div></div>
         ${customFieldInputs(e)}`,
       footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Save</button>`,
