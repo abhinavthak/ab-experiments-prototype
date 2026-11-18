@@ -49,12 +49,43 @@ function metricsOf(e) {
 }
 
 // How much of the page's traffic a targeting setup lets in.
+// Rough share of visitors who match one condition, from the site's traffic mix.
+const ATTR_SHARES = {
+  country: { in: 0.82, ae: 0.06, us: 0.05 },
+  browser: { chrome: 0.68, safari: 0.22, firefox: 0.05, edge: 0.04 },
+  utm_source: { google: 0.45, facebook: 0.2, instagram: 0.08, newsletter: 0.04 },
+  utm_medium: { cpc: 0.24, paid_social: 0.1, email: 0.04, organic: 0.38 },
+  lead_stage: { none: 0.86, enquired: 0.08, counselled: 0.03, applied: 0.02, enrolled: 0.01 },
+};
+const KNOWN = { country: 1, city: 1, browser: 1, utm_source: 0.62, utm_medium: 0.62, utm_campaign: 0.4, page_visits: 1, lead_stage: 1, is_logged_in: 1 };
+export function conditionShare(c) {
+  const v = String(c.value || "").trim().toLowerCase();
+  const vals = v.split(",").map((x) => x.trim()).filter(Boolean);
+  const table = ATTR_SHARES[c.attr];
+  const one = (x) => (table ? table[x] ?? 0.02 : c.attr === "city" ? 0.08 : c.attr === "utm_campaign" ? 0.1 : 0.15);
+  const known = KNOWN[c.attr] ?? 1;
+  switch (c.op) {
+    case "is": return v ? one(v) : 1;
+    case "not": return v ? 1 - one(v) : 1;
+    case "in": return vals.length ? Math.min(1, vals.reduce((a, x) => a + one(x), 0)) : 1;
+    case "nin": return vals.length ? Math.max(0, 1 - vals.reduce((a, x) => a + one(x), 0)) : 1;
+    case "contains": return v ? 0.2 : 1;
+    case "exists": return known;
+    case "true": return c.attr === "is_logged_in" ? 0.22 : 0.5;
+    case "false": return c.attr === "is_logged_in" ? 0.78 : 0.5;
+    case "gt": return c.attr === "page_visits" ? Math.exp(-(Number(v) || 0) / 3) : 0.5;
+    case "lt": return c.attr === "page_visits" ? 1 - Math.exp(-((Number(v) || 1) - 1) / 3) : 0.5;
+    default: return 1;
+  }
+}
+
+// How much of the page's traffic a targeting setup lets in.
 export function targetingFactor(t = {}, e = {}) {
   let f = 1;
   if (t.audience === "new") f *= 0.7;
   if (t.audience === "returning") f *= 0.3;
   if (t.excludeLeads) f *= 0.95;
-  (t.conditions || []).forEach(() => (f *= 0.6));
+  (t.conditions || []).forEach((c) => (f *= Math.max(0.01, conditionShare(c))));
   return f;
 }
 

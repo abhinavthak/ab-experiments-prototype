@@ -6,7 +6,7 @@ import { openModal, closeModal, icon, variantChip, callout, tagPicker } from "..
 import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS } from "../util.js";
 import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
-import { targetingFactor } from "../sim.js";
+import { targetingFactor, totals as simTotals } from "../sim.js";
 import { conditionEditor, bindConditions, readConditions, HASH_ATTRS, condText, CONDITIONS_INTRO } from "./targeting.js";
 
 export function eligibility(p, exceptId) {
@@ -34,19 +34,45 @@ export function metricOptions(selected, page, { exclude = [], placeholder = "Cho
   return html;
 }
 
-// Days needed to detect each MDE, from the page's traffic and targeting.
+// Days needed to detect each MDE. Before start: from the page's traffic,
+// rollout and targeting, with the metric's usual baseline. Once running: from
+// the visitors and Control conversion rate measured in the current phase.
 export function powerEstimate(e, mdes = [0.05, 0.1, 0.15, 0.2]) {
   const m = S.metric(e.primaryMetric);
   const p = S.page(e.pageId);
   if (!m || !p) return null;
-  const daily = p.traffic * (e.coverage / 100) * targetingFactor(e.targeting, e) * (e.targeting.device === "mobile" ? 0.62 : e.targeting.device === "desktop" ? 0.38 : 1);
   const k = Math.max(2, e.variantIds.length);
+  let daily = p.traffic * (e.coverage / 100) * targetingFactor(e.targeting, e) * (e.targeting.device === "mobile" ? 0.62 : e.targeting.device === "desktop" ? 0.38 : 1);
+  let base = m.base;
+  let sd = null;
+  let measured = null;
+  const ph = S.phasesOf(e);
+  if (ph.length && e.status !== "draft" && e.status !== "scheduled") {
+    const cur = ph[ph.length - 1];
+    const days = Math.max(0, ((cur.end ?? e.endedAt ?? S.now()) - cur.start) / DAY);
+    const tot = simTotals(e, { phase: ph.length - 1 });
+    const seen = tot.reduce((a, v) => a + v.n, 0);
+    const c = tot[0]?.m?.[m.id];
+    if (days >= 1 && seen > 0) {
+      daily = seen / days;
+      measured = { days, seen, perVariant: Math.min(...tot.map((v) => v.n)), baseMeasured: false };
+      if (c && c.n >= 200) {
+        if (m.type === "binomial" && c.x >= 10) { base = c.x / c.n; measured.baseMeasured = true; }
+        else if (m.type !== "binomial" && c.sum != null) {
+          const mean = c.sum / c.n;
+          if (mean > 0) { base = mean; sd = Math.sqrt(Math.max(0, c.sumSq / c.n - mean * mean)); measured.baseMeasured = true; }
+        }
+      }
+    }
+  }
   const alpha = 1 - S.settings().ciLevel;
   // More variants = more comparisons; Bonferroni-style alpha split keeps it honest.
   const a = alpha / (k - 1);
-  return { daily, metric: m, rows: mdes.map((mde) => {
-    const n = sampleSizePerVariant(m, mde, { alpha: a });
-    return { mde, n, days: Math.ceil((n * k) / Math.max(1, daily)) };
+  return { daily, base, metric: m, measured, k, rows: mdes.map((mde) => {
+    const n = sampleSizePerVariant(m, mde, { alpha: a, base, sd });
+    const daysTotal = Math.ceil((n * k) / Math.max(1, daily));
+    const left = measured ? Math.max(0, Math.ceil(((n - measured.perVariant) * k) / Math.max(1, daily))) : null;
+    return { mde, n, days: daysTotal, left };
   }) };
 }
 
@@ -54,14 +80,42 @@ export function powerTable(e) {
   const pe = powerEstimate(e);
   if (!pe) return `<div class="faint">Pick a page and a primary metric to estimate how long this will take.</div>`;
   const planned = e.plannedMde ?? 0.1;
-  return `<div class="small" style="margin:0 0 8px">${fmtInt(pe.daily)} eligible visitors a day · ${esc(pe.metric.name)} baseline ${pe.metric.type === "binomial" ? fmtPct(pe.metric.base, 1) : pe.metric.base} · 80% power</div>
-    <table class="t compact"><thead><tr><th>Smallest lift to detect</th><th class="num">Visitors per variant</th><th class="num">Days needed</th></tr></thead><tbody>
-    ${pe.rows.map((r) => `<tr class="${Math.abs(r.mde - planned) < 1e-9 ? "sel" : ""}"><td>${fmtPct(r.mde, 0)}${Math.abs(r.mde - planned) < 1e-9 ? ` <span class="badge blue">planned</span>` : ""}</td><td class="num">${fmtInt(r.n)}</td><td class="num"><b>${r.days > 365 ? "> 1 year" : `${r.days} days`}</b></td></tr>`).join("")}</tbody></table>
-    ${(() => {
-      const row = pe.rows.find((r) => Math.abs(r.mde - planned) < 1e-9);
-      if (!row || !e.stopAfterDays) return "";
-      return row.days > e.stopAfterDays ? callout("warn", `To detect a ${fmtPct(planned, 0)} lift this test needs about ${row.days} days, but it stops after ${e.stopAfterDays}. Run it longer, raise the rollout or accept a bigger minimum lift.`) : callout("good", `${e.stopAfterDays} days is enough to detect a ${fmtPct(planned, 0)} lift (needs ~${row.days}).`);
-    })()}`;
+  const bin = pe.metric.type === "binomial";
+  const fmtBase = (x) => (bin ? fmtPct(x, x < 0.1 ? 2 : 1) : (Math.round(x * 100) / 100).toLocaleString("en-IN"));
+  const dur = (d) => (d > 365 ? "> 1 year" : `${d} day${d === 1 ? "" : "s"}`);
+  const ms = pe.measured;
+  const running = ms && e.status === "running";
+  const conf = fmtPct(S.settings().ciLevel, 0);
+  const plannedRow = pe.rows.find((r) => Math.abs(r.mde - planned) < 1e-9);
+  const example = plannedRow ? `A ${fmtPct(planned, 0)} lift is relative: ${pe.metric.name} going from ${fmtBase(pe.base)} to ${fmtBase(pe.base * (1 + planned))}.` : "";
+
+  const facts = `<div class="plan-facts">
+      <div><span class="k">Visitors entering the test</span><b>${fmtInt(pe.daily)} a day</b><span class="faint">${ms ? `measured over ${Math.floor(ms.days)} day${Math.floor(ms.days) === 1 ? "" : "s"}` : "estimated from page traffic, rollout and targeting"}</span></div>
+      <div><span class="k">${esc(pe.metric.name)} on Control</span><b>${fmtBase(pe.base)}</b><span class="faint">${ms?.baseMeasured ? "measured so far" : "usual rate for this metric"}</span></div>
+      <div><span class="k">Variants</span><b>${pe.k}</b><span class="faint">${conf} confidence · 80% power</span></div>
+    </div>`;
+
+  const table = `<table class="t compact"><thead><tr><th>Smallest lift to detect</th><th class="num">Visitors per variant</th><th class="num">Total days</th>${running ? `<th class="num">Days left</th>` : ""}</tr></thead><tbody>
+    ${pe.rows.map((r) => `<tr class="${Math.abs(r.mde - planned) < 1e-9 ? "sel" : ""}"><td>${fmtPct(r.mde, 0)}${Math.abs(r.mde - planned) < 1e-9 ? ` <span class="badge blue">planned</span>` : ""}</td><td class="num">${fmtInt(r.n)}</td><td class="num">${dur(r.days)}</td>${running ? `<td class="num"><b>${r.left === 0 ? "Done" : dur(r.left)}</b></td>` : ""}</tr>`).join("")}</tbody></table>
+    <div class="hint" style="margin-top:8px">${esc(example)} Smaller lifts need far more visitors: halving the lift needs about 4× the traffic.</div>`;
+
+  const verdict = (() => {
+    if (!plannedRow) return "";
+    const p = fmtPct(planned, 0);
+    if (running) {
+      if (plannedRow.left === 0) return callout("good", `This test already has enough visitors to detect a ${p} lift.`);
+      const ranFor = Math.floor(ms.days);
+      const stopLeft = e.stopAfterDays ? Math.max(0, e.stopAfterDays - ranFor) : null;
+      if (stopLeft != null && plannedRow.left > stopLeft) return callout("warn", `About ${dur(plannedRow.left)} more to detect a ${p} lift, but it stops in ${dur(stopLeft)}. Run it longer, raise the rollout or accept a bigger minimum lift.`);
+      return callout("info", `About ${dur(plannedRow.left)} more to detect a ${p} lift.`);
+    }
+    if (ms) return ""; // stopped: the table is for reference
+    if (!e.stopAfterDays) return callout("info", `Plan to run it about ${dur(plannedRow.days)} to detect a ${p} lift.`);
+    return plannedRow.days > e.stopAfterDays
+      ? callout("warn", `To detect a ${p} lift this test needs about ${dur(plannedRow.days)}, but it stops after ${e.stopAfterDays} days. Run it longer, raise the rollout or accept a bigger minimum lift.`)
+      : callout("good", `${e.stopAfterDays} days is enough to detect a ${p} lift (needs about ${dur(plannedRow.days)}).`);
+  })();
+  return `${facts}${verdict}${table}`;
 }
 
 const STEPS = [["basics", "Overview"], ["variants", "Page & variants"], ["targeting", "Targeting"], ["metrics", "Metrics"], ["analysis", "Analysis"], ["review", "Review"]];

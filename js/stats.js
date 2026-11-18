@@ -134,12 +134,22 @@ export function adjustPValues(results, method) {
 }
 
 // Visitors per variant needed to detect a relative change "mde" on a metric.
-export function sampleSizePerVariant(metric, mde, { alpha = 0.05, power = 0.8 } = {}) {
+// Visitors needed in each variant to detect a relative lift `mde` with a
+// two-sided test. Conversion metrics use the standard two-proportion formula
+// (pooled variance under H0, unpooled under H1); means use 2σ²(zα+zβ)²/Δ².
+export function sampleSizePerVariant(metric, mde, { alpha = 0.05, power = 0.8, base = null, sd = null } = {}) {
   const za = invNorm(1 - alpha / 2);
   const zb = invNorm(power);
-  const mu = metric.base;
-  const variance = metric.type === "binomial" ? mu * (1 - mu) : (metric.sd ?? mu * 0.4) ** 2;
-  return Math.ceil((2 * (za + zb) ** 2 * variance) / (mu * mde) ** 2);
+  const mu = base ?? metric.base;
+  if (metric.type === "binomial") {
+    const p1 = mu;
+    const p2 = Math.min(0.999, mu * (1 + mde));
+    const pb = (p1 + p2) / 2;
+    const top = za * Math.sqrt(2 * pb * (1 - pb)) + zb * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+    return Math.ceil(top ** 2 / (p2 - p1) ** 2);
+  }
+  const s = sd ?? metric.sd ?? mu * 0.4;
+  return Math.ceil((2 * (za + zb) ** 2 * s ** 2) / (mu * mde) ** 2);
 }
 
 // Chance each arm is best (normal approximation, deterministic Monte Carlo).

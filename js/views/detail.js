@@ -155,8 +155,8 @@ function overview(e) {
     </section>
 
     <section class="card pad">
-      <div class="card-head"><div><h2>Plan</h2><div class="card-sub">How long the test needs, from this page's traffic and targeting.</div></div>
-        <div class="field" style="margin:0"><label class="sr-only" for="p-mde">Smallest lift worth detecting</label><select id="p-mde" class="inp" data-mde ${can(e, "editText") ? "" : "disabled"}>${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - (e.plannedMde ?? 0.1)) < 1e-9 ? "selected" : ""}>Detect ${fmtPct(m, 0)} lift</option>`).join("")}</select></div></div>
+      <div class="card-head"><div><h2>Plan</h2><div class="card-sub">How long the test needs to reliably detect the lift you care about.</div></div>
+        <div class="field plan-mde" style="margin:0"><label for="p-mde">Smallest lift worth detecting</label><select id="p-mde" class="inp" data-mde ${can(e, "editText") ? "" : "disabled"}>${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - (e.plannedMde ?? 0.1)) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div>
       ${powerTable(e)}
     </section>
 
