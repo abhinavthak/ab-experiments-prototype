@@ -67,6 +67,27 @@ Everything runs in your browser. Changes are saved in this browser only (localSt
 **Metrics:** the catalog and custom metrics.
 **Settings:** switch user and role (Admin / Editor / Viewer), the default stats engine, the **simulated clock** (+1 day / +7 days, to watch tests progress, start and stop), and reset demo data.
 
+## GrowthBook features added (v2)
+
+**Experiment flow**
+- **Create wizard**: Overview (type, template, name, key, hypothesis, tags, owner, custom fields) → Page & variants (split) → Targeting → Metrics → Analysis (engine, sequential, CUPED, duration, power estimate) → Review with the launch checklist.
+- **Launch checklist**: automatic checks plus manual QA items (managed in Settings; required items block Start).
+- **Make changes while running**: raise the rollout in the same phase, or start a new phase (new split, rollout or targeting; visitors re-randomized). Phases are listed on Overview and selectable on Results.
+- **Stop** records a result, a written conclusion and the page default. **Analyze a past experiment** imports a test by its dates.
+- **Templates**: save any experiment as a template and start new ones from it.
+
+**Experiment types**: A/B tests and **multi-armed bandits** (even split for 2 days, then daily Thompson-style re-weighting with a 2% floor; chance-to-be-best and traffic-share chart).
+
+**Targeting**: audience, device, UTM source, **attribute conditions**, **saved groups** (include/exclude), rollout, **namespaces** (mutually exclusive ranges; overlaps block Start), hash attribute, fallback, sticky bucketing. Managed under **Audiences**.
+
+**Results**: phase, **baseline**, **difference type** (relative / absolute / scaled impact), **dimension breakdowns** (device, country, browser, source, new vs returning), cumulative / daily / change-over-time charts with interval bands, Bayesian **risk**, **multiple-testing correction** (Holm-Bonferroni, Benjamini-Hochberg), minimum-data and suspicious-change flags, activation metric, CSV export, and shareable **reports**.
+
+**Health**: SRM, **multiple exposures**, enough-data check, guardrails, mid-test edits, traffic by dimension.
+
+**Insights**: dashboard (win rate, run time, by page), learnings, timeline, metric effects. **Holdouts**: hold out a share of visitors on chosen pages to measure the combined effect of shipped winners.
+
+**Metrics**: editable definition (type, baseline, conversion window, minimum data, suspicious-change threshold, planning lift, goal direction) and a metric page. **Settings**: interval level, win thresholds, correction, sequential tuning, CUPED/sequential defaults, minimum run time, SRM and multiple-exposure thresholds, guardrail rule, hypothesis requirement, assignment defaults, launch checklist, custom fields.
+
 ## Statistics
 
 Normal approximations, as in GrowthBook's engines:

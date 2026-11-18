@@ -4,10 +4,10 @@ import { can, why, stateOf } from "../rules.js";
 import { acts } from "../actions.js";
 import { icon, pill, variantChip, avatar, menu, menuItem, emptyRow } from "../ui.js";
 import { esc, fmtDate, fmtLift, fmtPct, DAY, daysBetween } from "../util.js";
-import { openCreate } from "./create.js";
+import { openCreate, openImport } from "./create.js";
 
 const PER_PAGE = 20;
-let ui = { tab: "all", q: "", pages: [], owners: [], tags: [], sort: "updated", page: 1 };
+let ui = { tab: "all", q: "", pages: [], owners: [], tags: [], types: [], sort: "updated", page: 1 };
 try {
   ui = { ...ui, ...JSON.parse(sessionStorage.getItem("abx-list") || "{}") };
 } catch { /* ignore */ }
@@ -28,7 +28,7 @@ function matches(e, q) {
     const [k, ...rest] = tok.split(":");
     const val = rest.join(":");
     if (rest.length && val) {
-      if (k === "is") return stateOf(e) === val || (val === "watched" && e.watched);
+      if (k === "is") return stateOf(e) === val || (val === "watched" && e.watched) || (val === "bandit" && e.type === "bandit") || (val === "mine" && e.ownerId === S.get().currentUserId);
       if (k === "owner") return owner.includes(val);
       if (k === "tag") return e.tags.some((t) => t.toLowerCase().includes(val));
       if (k === "page") return (p?.name || "").toLowerCase().includes(val) || (p?.path || "").includes(val);
@@ -109,7 +109,7 @@ function rowActions(e) {
 }
 
 function filterMenu(kind, label, options) {
-  const sel = ui[kind];
+  const sel = ui[kind] || (ui[kind] = []);
   const items = options.length
     ? options.map(([v, l]) => `<label><input type="checkbox" data-filter="${kind}" value="${esc(v)}" ${sel.includes(v) ? "checked" : ""}> ${esc(l)}</label>`).join("")
     : `<div class="faint" style="padding:8px 12px">None</div>`;
@@ -134,7 +134,8 @@ export function render() {
       matches(e, ui.q) &&
       (!ui.pages.length || ui.pages.includes(e.pageId)) &&
       (!ui.owners.length || ui.owners.includes(e.ownerId)) &&
-      (!ui.tags.length || e.tags.some((t) => ui.tags.includes(t))),
+      (!ui.tags.length || e.tags.some((t) => ui.tags.includes(t))) &&
+      (!(ui.types || []).length || ui.types.includes(e.type || "standard")),
   );
   const counts = Object.fromEntries(TABS.map(([k]) => [k, k === "all" ? filtered.filter((e) => !e.archived).length : filtered.filter((e) => tabOf(e) === k).length]));
   let rows = ui.tab === "all" ? filtered.filter((e) => !e.archived) : filtered.filter((e) => tabOf(e) === ui.tab);
@@ -150,10 +151,18 @@ export function render() {
   const pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
   ui.page = Math.min(ui.page, pages);
   const shown = rows.slice((ui.page - 1) * PER_PAGE, ui.page * PER_PAGE);
-  const anyFilter = ui.q || ui.pages.length || ui.owners.length || ui.tags.length;
+  const anyFilter = ui.q || ui.pages.length || ui.owners.length || ui.tags.length || (ui.types || []).length;
 
   const canCreate = S.canEdit();
-  const newBtn = `<button type="button" class="btn primary lg" data-act="exp-new" ${canCreate ? "" : 'aria-disabled="true" title="You need Editor access to create experiments"'}>${icon.plus()} New experiment</button>`;
+  const newBtn = canCreate
+    ? `<div class="split-btn"><button type="button" class="btn primary lg" data-act="exp-new">${icon.plus()} New experiment</button>${menu(icon.down(18), [
+        menuItem("exp-new", "A/B test", { ic: icon.flask(18) }),
+        menuItem("exp-new-bandit", "Multi-armed bandit", { ic: icon.pulse(18) }),
+        S.get().templates.length ? "<hr>" + S.get().templates.map((t) => menuItem("tpl-use", `From template: ${t.name}`, { ic: icon.form(18), data: `data-tid="${t.id}"` })).join("") : "",
+        "<hr>",
+        menuItem("exp-import", "Analyze a past experiment", { ic: icon.archive(18) }),
+      ].join(""), { label: "More ways to create", cls: "btn primary lg icon-btn" })}</div>`
+    : `<button type="button" class="btn primary lg" data-act="exp-new" aria-disabled="true" title="You need Editor access to create experiments">${icon.plus()} New experiment</button>`;
 
   if (!all.length) {
     return `<div class="page-head"><div><h1>Experiments</h1><div class="sub">Test page variants against the default and ship the winner</div></div>${newBtn}</div>
@@ -178,6 +187,7 @@ export function render() {
         ${filterMenu("pages", "Page", usedPages.map((p) => [p.id, p.name]))}
         ${filterMenu("owners", "Owner", usedOwners.map((u) => [u.id, u.name]))}
         ${filterMenu("tags", "Tags", allTags.map((t) => [t, t]))}
+        ${filterMenu("types", "Type", [["standard", "A/B test"], ["bandit", "Bandit"]])}
         ${menu(`${esc(SORTS[ui.sort])} ${icon.down()}`, Object.entries(SORTS).map(([k, l]) => menuItem("list-sort", `${ui.sort === k ? "✓ " : ""}${l}`, { data: `data-sort="${k}"` })).join(""), { label: "Sort", cls: "btn sm" })}
       </div>
     </div>
@@ -191,7 +201,7 @@ export function render() {
         return `<tr data-id="${e.id}">
           <td><button type="button" class="star ${e.watched ? "on" : ""}" data-act="exp-watch" aria-pressed="${e.watched}" aria-label="${e.watched ? "Stop watching" : "Watch"} ${esc(e.name)}">${e.watched ? "★" : "☆"}</button></td>
           <td><a class="exp-name" href="#/experiment/${e.id}/${e.status === "draft" || e.status === "scheduled" ? "overview" : "results"}">${esc(e.name)}</a>
-            <div class="meta"><span>${esc(p?.name || "Deleted page")}</span><span aria-hidden="true">·</span><span class="mono">${esc(e.trackingKey)}</span>${e.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join("")}</div>
+            <div class="meta">${e.type === "bandit" ? `<span class="badge blue">Bandit</span>` : ""}${e.imported ? `<span class="badge">Imported</span>` : ""}<span>${esc(p?.name || "Deleted page")}</span><span aria-hidden="true">·</span><span class="mono">${esc(e.trackingKey)}</span>${e.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join("")}</div>
             <div class="chips"><span class="chip-row">${vs.map((v) => variantChip(v)).join("")}</span><span aria-hidden="true" style="color:var(--border)">|</span>${avatar(e.ownerId)}</div></td>
           <td>${pm ? `<b style="font-weight:500;font-size:14px">${esc(pm.name)}</b>${extra ? ` <span class="faint">+${extra}</span>` : ""}` : `<span class="faint">None</span>`}</td>
           <td>${statusCell(e)}</td>
@@ -232,7 +242,9 @@ Object.assign(acts, {
   "list-sort": (el, rr) => { ui.sort = el.dataset.sort; persist(); rr(); },
   "list-page": (el, rr) => { ui.page = Number(el.dataset.p); persist(); rr(); },
   "list-clear-filter": (el, rr) => { ui[el.dataset.kind] = []; persist(); rr(); },
-  "list-clear-all": (el, rr) => { Object.assign(ui, { q: "", pages: [], owners: [], tags: [], page: 1 }); persist(); rr(); },
+  "list-clear-all": (el, rr) => { Object.assign(ui, { q: "", pages: [], owners: [], tags: [], types: [], page: 1 }); persist(); rr(); },
   "exp-new": () => openCreate(),
+  "exp-new-bandit": () => openCreate(null, { type: "bandit" }),
+  "exp-import": () => openImport(),
 });
 export const pct = fmtPct;

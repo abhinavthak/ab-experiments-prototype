@@ -14,6 +14,18 @@ function guard(e, action) {
   return false;
 }
 
+export function checklistHtml(e, items, { interactive = false } = {}) {
+  return `<ul class="checklist">${items
+    .map((i) => {
+      const cls = i.warn ? "warn" : i.ok ? "ok" : "bad";
+      const box = i.manual && interactive && S.canEdit() && !e.archived
+        ? `<input type="checkbox" class="cl-box" data-act="exp-check" data-cid="${i.manual}" ${e.checklist?.[i.manual] ? "checked" : ""} aria-label="${esc(i.label)}">`
+        : `<span class="ic">${i.warn ? "!" : i.ok ? "✓" : "✕"}</span>`;
+      return `<li class="${cls}">${box}<span>${esc(i.label)}${i.optional ? ` <span class="faint">· optional</span>` : ""}${!i.ok && i.fix ? `<br><span class="faint">${esc(i.fix)}</span>` : ""}</span></li>`;
+    })
+    .join("")}</ul>`;
+}
+
 function splitText(e) {
   return S.variantsOf(e).map((v, i) => `${v.key} ${e.weights[i]}%`).join(" · ");
 }
@@ -23,14 +35,12 @@ export function startExperiment(e) {
   if (!guard(e, "startNow")) return;
   const { items, blocked } = S.startChecks(e);
   const p = S.page(e.pageId);
-  const list = `<ul class="checklist">${items
-    .map((i) => `<li class="${i.warn ? "warn" : i.ok ? "ok" : "bad"}"><span class="ic">${i.warn ? "!" : i.ok ? "✓" : "✕"}</span><span>${esc(i.label)}${!i.ok && i.fix ? ` <span class="faint">· ${esc(i.fix)}</span>` : ""}</span></li>`)
-    .join("")}</ul>`;
+  const list = checklistHtml(e, items, { interactive: true });
   if (blocked) {
     openModal({
       title: `Ready to start · ${items.filter((i) => !i.ok && !i.warn).length} to fix`,
       ic: icon.warn(18), tone: "amber",
-      body: `<p style="margin-top:0">Start stays disabled until every red item is fixed. Amber items only warn.</p>${list}`,
+      body: `<p style="margin-top:0">Start stays disabled until every red item is fixed. Amber items only warn. Tick manual items here or in the launch checklist on Overview.</p>${list}`,
       footer: `<button type="button" class="btn sm" data-act="modal-close">Close</button><button type="button" class="btn sm primary" disabled>Start experiment</button>`,
     });
     return;
@@ -38,7 +48,7 @@ export function startExperiment(e) {
   openModal({
     title: "Start this experiment?",
     ic: icon.play(18), tone: "blue",
-    body: `<p style="margin-top:0"><b>${esc(e.name)}</b> will go live to ${e.coverage}% of ${esc(p.name)} visitors, split ${esc(splitText(e))}.</p>
+    body: `<p style="margin-top:0"><b>${esc(e.name)}</b> will go live to ${e.coverage}% of ${esc(p.name)} visitors${e.type === "bandit" ? ", starting with an even split that then adapts daily toward the best arm" : `, split ${esc(splitText(e))}`}.</p>
       ${list}
       ${callout("info", "Once started, you can't add or remove variants, change the split, change the primary metric, change the tracking key, or change the page default.")}`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Start now</button>`,
@@ -48,6 +58,7 @@ export function startExperiment(e) {
       e.scheduledStart = null;
       e.notice = null;
       e.sim = e.sim || S.simFor(e);
+      S.openPhase(e, e.startedAt, "Started");
       S.log(e, "Started the experiment");
       S.save();
       closeModal();
@@ -172,9 +183,10 @@ export function stopExperiment(e, { preset = null } = {}) {
         .join("")}</div>
       <div class="field" id="winner-field" style="margin-top:16px"><label for="st-winner">Winning variant</label>
         <select id="st-winner" name="winner" class="inp">${vs.slice(1).map((v) => `<option value="${v.id}" ${v.id === winner ? "selected" : ""}>${esc(v.key)} · ${esc(v.name)}</option>`).join("")}</select></div>
-      <div class="field"><label for="st-default">Page default after stopping</label>
+      <div class="field" ${e.imported ? "hidden" : ""}><label for="st-default">Page default after stopping</label>
         <select id="st-default" name="released" class="inp">${vs.map((v) => `<option value="${v.id}">${esc(v.key)} · ${esc(v.name)}${v.id === p.defaultVariantId ? " (current default)" : ""}</option>`).join("")}</select>
         <div class="hint" id="st-hint"></div></div>
+      <div class="field"><label for="st-sum">Conclusion <span class="opt">· what you learned, shown on Results and in Insights</span></label><textarea id="st-sum" name="summary" class="inp" placeholder="What happened, why you think so, and what to try next">${esc(e.analysisSummary || "")}</textarea></div>
       ${callout("info", "A stopped test can't restart. Duplicate it to run again. Results stay readable.")}`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">${recording ? "Save result" : "Stop experiment"}</button>`,
     onOpen: (form) => {
@@ -196,16 +208,19 @@ export function stopExperiment(e, { preset = null } = {}) {
       if (!recording) {
         e.status = "stopped";
         e.endedAt = S.now();
+        S.closePhase(e, e.endedAt);
       }
+      e.analysisSummary = String(fd.get("summary") || "").trim();
       e.result = result;
       e.winnerVariantId = result === "won" ? fd.get("winner") : null;
       e.releasedVariantId = fd.get("released");
-      applyPageDefault(p, e.releasedVariantId, e.id);
+      // Imported tests ran in the past, so recording them doesn't change the page.
+      if (!e.imported) applyPageDefault(p, e.releasedVariantId, e.id);
       const rel = vs.find((v) => v.id === e.releasedVariantId);
       S.log(e, `${recording ? "Recorded" : "Stopped the experiment and recorded"} “${RESULT_LABEL[result]}”; ${rel.key} is the page default`);
       S.save();
       closeModal();
-      toast(`${rel.key} is now the default for ${p.name}`, "good");
+      toast(e.imported ? "Result recorded" : `${rel.key} is now the default for ${p.name}`, "good");
     },
   });
 }
@@ -269,6 +284,8 @@ export function duplicateExperiment(e) {
     hypothesis: e.hypothesis, description: e.description, tags: [...e.tags], coverage: e.coverage, targeting: { ...e.targeting },
     primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics],
     statsEngine: e.statsEngine, sequential: e.sequential, cuped: e.cuped, stopAfterDays: e.stopAfterDays, leadAttribution: e.leadAttribution,
+    targeting: structuredClone(e.targeting), assignment: { ...e.assignment }, type: e.type, namespace: e.namespace ? structuredClone(e.namespace) : null,
+    activationMetric: e.activationMetric, customFields: { ...e.customFields }, plannedMde: e.plannedMde,
   });
   d.history.push({ at: S.now(), by: S.get().currentUserId, text: `Duplicated from “${e.name}”` });
   S.get().experiments.unshift(d);
@@ -310,6 +327,98 @@ export function toggleWatch(e) {
   toast(e.watched ? "Watching. You'll be notified of changes." : "Stopped watching");
 }
 
+// Make changes while running (GrowthBook's "Make changes"): either raise the
+// rollout in the same phase, or start a new phase with a new split, rollout
+// or targeting. A new phase re-randomizes visitors; results restart.
+export function makeChanges(e) {
+  if (e.status !== "running" || !S.canEdit()) return toast(S.canEdit() ? "Only running experiments" : "You need Editor access", "bad");
+  const vs = S.variantsOf(e);
+  const t = e.targeting;
+  const sel = (name, opts, v) => `<select name="${name}" class="inp" id="mc-${name}">${opts.map(([k, l]) => `<option value="${k}" ${v === k ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  openModal({
+    title: "Make changes",
+    wide: true,
+    ic: icon.edit(18), tone: "blue",
+    body: `<div class="stack-sm" role="radiogroup" aria-label="Kind of change">
+        <label class="check on"><input type="radio" name="kind" value="rollout" checked><span><span class="t1">Increase the rollout · same phase</span><span class="t2">Safe: adds more visitors without re-assigning anyone. Results keep all data.</span></span></label>
+        <label class="check"><input type="radio" name="kind" value="phase"><span><span class="t1">Start a new phase</span><span class="t2">Change the split, rollout or targeting. Everyone is re-randomized and results restart from now. Earlier phases stay readable.</span></span></label>
+      </div>
+      <div data-k="rollout" style="margin-top:16px"><div class="field"><label for="mc-cov">Rollout</label><div class="pct-input"><input id="mc-cov" name="cov1" type="number" class="inp" min="${e.coverage}" max="100" value="${e.coverage}"><span>%</span></div><div class="hint">Currently ${e.coverage}%. Lowering it needs a new phase.</div><div data-err="cov1"></div></div></div>
+      <div data-k="phase" hidden style="margin-top:16px">
+        ${e.type === "bandit" ? callout("info", "Bandit weights are set automatically. A new phase resets the bandit to an even split.") : `<div class="field"><span class="label">Traffic split</span>${vs.map((v, i) => `<div class="row" style="margin-bottom:6px">${variantChip(v)}<span class="grow">${esc(v.name)}</span><div class="pct-input" style="width:110px"><input name="w${i}" type="number" class="inp" min="0" max="100" value="${e.weights[i]}" aria-label="Split for ${esc(v.key)}"><span>%</span></div></div>`).join("")}<div data-err="w"></div></div>`}
+        <div class="row"><div class="grow field"><label for="mc-cov2">Rollout</label><div class="pct-input"><input id="mc-cov2" name="cov2" type="number" class="inp" min="1" max="100" value="${e.coverage}"><span>%</span></div></div>
+          <div class="grow field"><label for="mc-audience">Audience</label>${sel("audience", [["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]], t.audience)}</div>
+          <div class="grow field"><label for="mc-device">Device</label>${sel("device", [["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]], t.device)}</div></div>
+        <div class="field"><label for="mc-reason">Reason <span class="opt">· shown in the phase list</span></label><input id="mc-reason" name="reason" class="inp" placeholder="e.g. Fixed a layout bug in B"></div>
+        ${callout("warn", "Variants, the primary metric and the tracking key stay locked. To change those, stop this test and duplicate it.")}
+      </div>`,
+    footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Apply changes</button>`,
+    onOpen: (form) => form.addEventListener("change", () => {
+      const k = form.querySelector("input[name=kind]:checked").value;
+      form.querySelectorAll("[data-k]").forEach((d) => (d.hidden = d.dataset.k !== k));
+      form.querySelectorAll(".check").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked));
+    }),
+    onSubmit: (fd, form) => {
+      const err = (k, m) => (form.querySelector(`[data-err=${k}]`).innerHTML = `<div class="err">${icon.warn(14)} ${esc(m)}</div>`);
+      if (fd.get("kind") === "rollout") {
+        const c = Number(fd.get("cov1"));
+        if (!(c >= e.coverage && c <= 100)) return err("cov1", `Enter ${e.coverage}–100`);
+        if (c === e.coverage) return closeModal();
+        e.coverage = c;
+        // Same phase: the rollout steps up from now on; no one is re-assigned.
+        const ph = e.phases[e.phases.length - 1];
+        ph.steps = [...(ph.steps || []), { at: S.now(), coverage: c }];
+        S.log(e, `Raised the rollout to ${c}% (same phase)`);
+      } else {
+        if (e.type !== "bandit") {
+          const w = vs.map((_, i) => Number(fd.get(`w${i}`)) || 0);
+          if (Math.round(w.reduce((a, b) => a + b, 0)) !== 100) return err("w", "The split must add up to 100%");
+          e.weights = w;
+        }
+        e.coverage = Math.max(1, Math.min(100, Number(fd.get("cov2")) || e.coverage));
+        e.targeting = { ...e.targeting, audience: fd.get("audience"), device: fd.get("device") };
+        const reason = String(fd.get("reason") || "").trim() || "New phase";
+        S.openPhase(e, S.now(), reason);
+        S.log(e, `Started phase ${e.phases.length}: ${reason}`);
+      }
+      S.save();
+      closeModal();
+      toast(fd.get("kind") === "rollout" ? "Rollout increased" : `Phase ${e.phases.length} started. Results restart from now.`, "good");
+    },
+  });
+}
+
+export function saveAsTemplate(e) {
+  if (!S.canEdit()) return toast("You need Editor access", "bad");
+  openModal({
+    title: "Save as template",
+    body: `<div class="field"><label for="tp-name">Template name</label><input id="tp-name" name="name" class="inp" value="${esc(e.name.replace(/^[^—]+—\s*/, ""))} template"><div data-err="name"></div></div>
+      <div class="field"><label for="tp-desc">Description <span class="opt">· optional</span></label><input id="tp-desc" name="desc" class="inp"></div>
+      <p class="hint">Saves the type, metrics, analysis settings, targeting, stop date, tags and hypothesis. Not the page or variants.</p>`,
+    footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Save template</button>`,
+    onSubmit: (fd, form) => {
+      const name = String(fd.get("name")).trim();
+      if (!name) return (form.querySelector("[data-err=name]").innerHTML = `<div class="err">Enter a name</div>`);
+      S.get().templates.push({ id: uid("t"), name, desc: String(fd.get("desc")).trim(), type: e.type, primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics],
+        statsEngine: e.statsEngine, sequential: e.sequential, cuped: e.cuped, stopAfterDays: e.stopAfterDays, tags: [...e.tags], hypothesis: e.hypothesis, targeting: structuredClone(e.targeting), activationMetric: e.activationMetric,
+        createdAt: S.now(), ownerId: S.get().currentUserId });
+      S.save();
+      closeModal();
+      toast(`Saved template “${name}”`, "good");
+    },
+  });
+}
+
+export function createReport(e, settings) {
+  if (!S.canEdit()) return toast("You need Editor access", "bad");
+  const r = { id: uid("r"), expId: e.id, title: `${e.name} — report`, note: "", settings, by: S.get().currentUserId, createdAt: S.now() };
+  S.get().reports.unshift(r);
+  S.log(e, `Created the report “${r.title}”`);
+  S.save();
+  toast("Report created. It keeps these settings and can be shared.", "good");
+  go(`#/report/${r.id}`);
+}
+
 // Registry hooks
 const byId = (el) => S.exp(el.closest("[data-id]")?.dataset.id || el.dataset.id);
 Object.assign(acts, {
@@ -324,6 +433,21 @@ Object.assign(acts, {
   "exp-stopdate": (el) => editStopDate(byId(el)),
   "exp-watch": (el) => toggleWatch(byId(el)),
   "exp-copykey": (el) => copyText(byId(el).trackingKey),
+  "exp-make-changes": (el) => makeChanges(byId(el)),
+  "exp-save-template": (el) => saveAsTemplate(byId(el)),
+  "exp-check": (el) => {
+    const e = byId(el);
+    if (!S.canEdit() || e.archived) return;
+    e.checklist = { ...(e.checklist || {}), [el.dataset.cid]: el.checked };
+    S.log(e, `${el.checked ? "Ticked" : "Unticked"} “${S.get().launchChecklist.find((c) => c.id === el.dataset.cid)?.text}”`);
+    S.save();
+    // Re-render the start modal's list if it's open.
+    const modalList = document.querySelector("#modal-root .checklist");
+    if (modalList) {
+      closeModal();
+      startExperiment(e);
+    }
+  },
   "exp-dismiss-notice": (el) => {
     const e = byId(el);
     e.notice = null;
