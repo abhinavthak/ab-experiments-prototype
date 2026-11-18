@@ -77,7 +77,7 @@ Everything runs in your browser. Changes are saved in this browser only (localSt
 
 **Experiment types**: A/B tests and **multi-armed bandits** (even split for 2 days, then daily Thompson-style re-weighting with a 2% floor; chance-to-be-best and traffic-share chart).
 
-**Targeting**: audience, device, UTM source, **attribute conditions**, **saved groups** (include/exclude), rollout, **namespaces** (mutually exclusive ranges; overlaps block Start), hash attribute, fallback, sticky bucketing. Managed under **Audiences**.
+**Targeting**: audience, device, **attribute conditions** (country, UTM, lead stage… each rule explained in plain language as you build it), rollout, hash attribute, fallback, sticky bucketing. Attributes are listed under **Audiences**.
 
 **Results**: phase, **baseline**, **difference type** (relative / absolute / scaled impact), **dimension breakdowns** (device, country, browser, source, new vs returning), cumulative / daily / change-over-time charts with interval bands, Bayesian **risk**, **multiple-testing correction** (Holm-Bonferroni, Benjamini-Hochberg), minimum-data and suspicious-change flags, activation metric, CSV export, and shareable **reports**.
 

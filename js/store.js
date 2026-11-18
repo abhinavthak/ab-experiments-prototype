@@ -51,7 +51,7 @@ function seed(now) {
   const ids = (p, keys) => keys.map((k) => p.variants.find((x) => x.key === k).id);
   const base = (o) => ({
     hypothesis: "", description: "", tags: [], ownerId: "u_at", watched: false, coverage: 100,
-    targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [], savedGroups: [] },
+    targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [] },
     assignment: { hashAttribute: "visitor_id", fallback: "", sticky: true }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
     secondaryMetrics: [], guardrailMetrics: [], statsEngine: "bayesian", sequential: false, cuped: false, leadAttribution: true,
@@ -70,10 +70,10 @@ function seed(now) {
     status: "running", startedAt: d(-4), createdAt: d(-6), sim: { seed: 22, skew: [1.17, 1], lifts: { B: { m_enroll: -0.021 } } } });
   const e3 = base({ id: "e_ms", name: "Microsoft GenAI — Enroll CTA copy", trackingKey: "msft-genai-enroll-copy", pageId: ms.id, variantIds: ids(ms, ["A", "B", "C"]), weights: [34, 33, 33],
     hypothesis: "Copy that names the certificate outcome will get more clicks than “Enroll now”.", tags: ["copy", "cta"], ownerId: "u_tu", primaryMetric: "m_cta",
-    status: "scheduled", scheduledStart: d(3) - 3600000, stopAfterDays: 14, createdAt: d(-3), namespace: { id: "ns_programs", range: [50, 100] }, customFields: { cf_team: "Marketing" } });
+    status: "scheduled", scheduledStart: d(3) - 3600000, stopAfterDays: 14, createdAt: d(-3), customFields: { cf_team: "Marketing" } });
   const e4 = base({ id: "e_ai", name: "AI-Native SE — fee block layout", trackingKey: "ai-native-fee-block", pageId: ai.id, variantIds: ids(ai, ["A", "B"]), weights: [50, 50],
     hypothesis: "Showing fees and EMI options before the curriculum reduces drop-off.", tags: ["fees"], primaryMetric: null, status: "draft", createdAt: d(-1),
-    namespace: { id: "ns_programs", range: [0, 50] }, customFields: { cf_team: "Admissions" } });
+    customFields: { cf_team: "Admissions" } });
   const e5 = base({ id: "e_dsa", name: "DSA free course — signup CTA copy", trackingKey: "dsa-signup-cta-copy", pageId: dsa.id, variantIds: ids(dsa, ["A", "B"]), weights: [50, 50],
     hypothesis: "“Start learning free” beats “Sign up”.", tags: ["copy", "cta"], primaryMetric: "m_lead", secondaryMetrics: ["m_enroll", "m_scroll"],
     status: "stopped", startedAt: d(-36), endedAt: d(-15), stopAfterDays: 21, result: "won", createdAt: d(-38), sim: { seed: 55, lifts: { B: { m_lead: 0.16, m_enroll: 0.05 } } },
@@ -115,15 +115,6 @@ function seed(now) {
   });
   e1.comments.push({ id: uid("c"), at: d(-2), by: "u_tu", text: "B is pulling ahead on mobile. Let's keep it to the full 21 days before calling it." });
 
-  const savedGroups = [
-    { id: "sg_paid", name: "Paid campaign visitors", kind: "condition", condition: "utm_medium is one of cpc, paid_social", reach: 0.34, desc: "Arrived from a paid ad", ownerId: "u_tu", createdAt: d(-120) },
-    { id: "sg_india", name: "Visitors in India", kind: "condition", condition: "country is IN", reach: 0.82, desc: "Geo from the CDN header", ownerId: "u_at", createdAt: d(-200) },
-    { id: "sg_staff", name: "Staff & counsellors", kind: "list", attribute: "lead_email", values: ["counsellor1@example.edu", "counsellor2@example.edu", "admissions@example.edu"], reach: 0.02, desc: "Exclude internal traffic", ownerId: "u_at", createdAt: d(-200) },
-  ];
-  const namespaces = [
-    { id: "ns_programs", name: "Program page tests", desc: "Visitors are in at most one program-page experiment at a time" },
-    { id: "ns_header", name: "Common Header", desc: "Tests that change the shared header block" },
-  ];
   const customFields = [
     { id: "cf_team", name: "Team", type: "select", options: ["Growth", "Marketing", "Admissions", "Product"], required: false },
   ];
@@ -142,7 +133,7 @@ function seed(now) {
   e4.checklist = { lc_qa: true };
   e3.checklist = { lc_qa: true, lc_form: true, lc_owner: true };
 
-  return { v: 2, launchChecklist, pages, metrics, experiments: exps, savedGroups, namespaces, customFields, holdouts, reports, currentUserId: "u_at", role: "admin",
+  return { v: 2, launchChecklist, pages, metrics, experiments: exps, customFields, holdouts, reports, currentUserId: "u_at", role: "admin",
     settings: { ...DEFAULT_SETTINGS }, clockOffsetDays: 0, notices: [], seededAt: now };
 }
 
@@ -165,7 +156,10 @@ export function load() {
   // The sample "Ticket" custom field was removed; drop it from data saved before that.
   state.customFields = (state.customFields || []).filter((f) => f.id !== "cf_ticket");
   // The free-text "Traffic source" targeting field was removed; UTM rules live in attribute conditions.
-  (state.experiments || []).forEach((e) => { if (e.targeting) delete e.targeting.source; });
+  // Saved groups were removed; targeting uses attribute conditions only.
+  delete state.savedGroups;
+  delete state.namespaces;
+  (state.experiments || []).forEach((e) => { if (e.targeting) { delete e.targeting.source; delete e.targeting.savedGroups; } e.namespace = null; });
   reconcile();
   return state;
 }
@@ -193,8 +187,6 @@ export const page = (id) => state.pages.find((p) => p.id === id);
 export const exp = (id) => state.experiments.find((e) => e.id === id);
 export const metric = (id) => state.metrics.find((m) => m.id === id);
 export const canEdit = () => state.role !== "viewer";
-export const savedGroup = (id) => state.savedGroups.find((g) => g.id === id);
-export const namespace = (id) => state.namespaces.find((n) => n.id === id);
 export const holdout = (id) => state.holdouts.find((h) => h.id === id);
 export const report = (id) => state.reports.find((r) => r.id === id);
 export const settings = () => state.settings;
@@ -252,10 +244,6 @@ export function startChecks(e) {
     { ok: e.coverage > 0, label: "Rollout is above 0%" },
     { ok: !other, label: "No other running or scheduled experiment on this page", fix: other ? `“${other.name}” is ${other.status}` : "" },
   ];
-  if (e.namespace?.id) {
-    const clash = namespaceClash(e);
-    items.push({ ok: !clash, label: `Namespace range ${e.namespace.range[0]}–${e.namespace.range[1]}% is free in “${namespace(e.namespace.id)?.name}”`, fix: clash ? `Overlaps “${clash.name}” (${clash.namespace.range.join("–")}%)` : "" });
-  }
   if (e.type === "bandit") items.push({ ok: S_metricType(e) === "binomial", label: "Bandit decision metric is a conversion metric", fix: "Bandits need a conversion (yes/no) primary metric" });
   if (state.settings.requireHypothesis) items.push({ ok: !!e.hypothesis, label: "Hypothesis written", fix: "Your settings require a hypothesis before starting" });
   state.launchChecklist.forEach((c) => items.push(c.required ? { ok: !!e.checklist?.[c.id], manual: c.id, label: c.text, fix: "Tick it in the launch checklist" } : { ok: true, warn: !e.checklist?.[c.id], manual: c.id, label: c.text, optional: true }));
@@ -266,12 +254,6 @@ export function startChecks(e) {
 
 function S_metricType(e) {
   return metric(e.primaryMetric)?.type || "binomial";
-}
-
-export function namespaceClash(e) {
-  if (!e.namespace?.id) return null;
-  const [a, b] = e.namespace.range;
-  return state.experiments.find((x) => x.id !== e.id && !x.archived && (x.status === "running" || x.status === "scheduled") && x.namespace?.id === e.namespace.id && x.namespace.range[0] < b && a < x.namespace.range[1]);
 }
 
 export function simFor(e) {
@@ -327,7 +309,7 @@ export function reconcile() {
 export function newExperimentDraft() {
   return {
     id: uid("e"), name: "", trackingKey: "", pageId: null, variantIds: [], weights: [], hypothesis: "", description: "", tags: [], ownerId: state.currentUserId,
-    watched: true, coverage: 100, targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [], savedGroups: [] }, primaryMetric: null,
+    watched: true, coverage: 100, targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [] }, primaryMetric: null,
     assignment: { hashAttribute: state.settings.hashAttribute, fallback: "", sticky: state.settings.stickyDefault }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
     secondaryMetrics: [], guardrailMetrics: [], statsEngine: state.settings.statsEngine, sequential: state.settings.sequentialDefault && state.settings.statsEngine === "frequentist", cuped: state.settings.cupedDefault, leadAttribution: true,

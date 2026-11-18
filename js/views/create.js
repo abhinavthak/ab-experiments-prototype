@@ -7,7 +7,7 @@ import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_C
 import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
 import { targetingFactor } from "../sim.js";
-import { conditionEditor, bindConditions, readConditions, savedGroupPicker, readSavedGroups, namespaceBar, HASH_ATTRS, condText } from "./targeting.js";
+import { conditionEditor, bindConditions, readConditions, HASH_ATTRS, condText, CONDITIONS_INTRO } from "./targeting.js";
 
 export function eligibility(p, exceptId) {
   if (p.status !== "live") return "Draft page";
@@ -137,13 +137,10 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       return `<div class="row"><div class="grow field"><label for="c-aud">Audience</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
 </div>
-      <div class="field"><span class="label">Attribute conditions</span>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
-      <div class="field"><span class="label">Saved groups</span>${savedGroupPicker(t.savedGroups || [])}</div>
+      <div class="field"><span class="label">Attribute conditions <span class="opt">· optional</span></span>${CONDITIONS_INTRO}${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
       <label class="check" style="margin-bottom:16px"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
-      <div class="row"><div class="grow field"><label for="c-cov">Rollout · share of eligible visitors in the test</label><div class="pct-input"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div><div data-err="coverage"></div></div>
-        <div class="grow field"><label for="c-ns">Namespace <span class="opt">· optional</span></label><select id="c-ns" name="ns" class="inp"><option value="">None</option>${st.namespaces.map((n) => `<option value="${n.id}" ${d.namespace?.id === n.id ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></div></div>
-      ${d.namespace ? `<div class="field"><span class="label">Namespace range</span><div class="row"><div class="pct-input" style="width:110px"><input name="ns0" type="number" class="inp" min="0" max="99" value="${d.namespace.range[0]}" aria-label="From"><span>%</span></div><span>to</span><div class="pct-input" style="width:110px"><input name="ns1" type="number" class="inp" min="1" max="100" value="${d.namespace.range[1]}" aria-label="To"><span>%</span></div></div><div style="margin-top:8px">${namespaceBar(d.namespace.id, d.namespace.range, d.id)}</div><div data-err="ns"></div></div>` : ""}
-      <details class="adv"><summary>Assignment</summary>
+      <div class="field"><label for="c-cov">Rollout · share of eligible visitors in the test</label><div class="pct-input" style="max-width:200px"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div><div data-err="coverage"></div></div>
+            <details class="adv"><summary>Assignment</summary>
         <div class="row" style="margin-top:12px"><div class="grow field"><label for="c-hash">Assign variants by</label><select id="c-hash" name="hash" class="inp">${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${d.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
           <div class="grow field"><label for="c-fb">Fallback <span class="opt">· if missing</span></label><select id="c-fb" name="fallback" class="inp"><option value="">None (skip the visitor)</option>${HASH_ATTRS.filter(([k]) => k !== d.assignment.hashAttribute).map(([k, l]) => `<option value="${k}" ${d.assignment.fallback === k ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
         <label class="check"><input type="checkbox" name="sticky" ${d.assignment.sticky ? "checked" : ""}><span><span class="t1">Sticky bucketing</span><span class="t2">Keep visitors in their variant even if the split or targeting changes later</span></span></label></details>
@@ -173,7 +170,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const sec = (title, i, body, cls = "") => `<section class="rv-sec ${cls}"><div class="rv-h"><h3>${title}</h3><button type="button" class="link-btn" data-goto="${i}">Edit</button></div>${body}</section>`;
       const kv = (k, v) => `<div class="rv-kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
       const color = (v) => VARIANT_COLORS[Math.max(0, v.key.charCodeAt(0) - 65) % VARIANT_COLORS.length];
-      const who = [t.audience !== "all" ? `${t.audience === "new" ? "New" : "Returning"} visitors` : "", t.device !== "all" ? `${t.device === "mobile" ? "Mobile" : "Desktop"} only` : "", ...(t.conditions || []).map(condText), ...(t.savedGroups || []).map((g) => `${g.mode === "exclude" ? "Excluding" : "Only"} ${S.savedGroup(g.id)?.name}`), t.excludeLeads ? "Excluding existing leads" : ""].filter(Boolean);
+      const who = [t.audience !== "all" ? `${t.audience === "new" ? "New" : "Returning"} visitors` : "", t.device !== "all" ? `${t.device === "mobile" ? "Mobile" : "Desktop"} only` : "", ...(t.conditions || []).map(condText), t.excludeLeads ? "Excluding existing leads" : ""].filter(Boolean);
       const pe = powerEstimate(d);
       const prow = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
       const owner = S.USERS.find((u) => u.id === d.ownerId)?.name || "";
@@ -204,7 +201,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
 
           ${sec("Targeting", 2, `${kv("Who", who.length ? who.map(esc).join("<br>") : "All visitors")}
             ${kv("Rollout", `${d.coverage}% of eligible visitors`)}
-            ${d.namespace ? kv("Namespace", `${esc(S.namespace(d.namespace.id)?.name)} · ${d.namespace.range.join("–")}%`) : ""}`)}
+`)}
 
           ${sec("Metrics", 3, `${kv("Primary", d.primaryMetric ? `<b>${mName(d.primaryMetric)}</b>` : `<span class="down">Not selected</span>`)}
             ${kv("Secondary", d.secondaryMetrics.length ? d.secondaryMetrics.map(mName).join(", ") : none())}
@@ -268,21 +265,10 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         else if (d.type !== "bandit" && d.weights.some((w) => w <= 0)) errs.split = "Every variant needs some traffic";
       }
     } else if (k === "targeting") {
-      d.targeting = { audience: fd.get("audience"), device: fd.get("device"), excludeLeads: !!fd.get("excludeLeads"), conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form) };
+      d.targeting = { audience: fd.get("audience"), device: fd.get("device"), excludeLeads: !!fd.get("excludeLeads"), conditions: readConditions(form, "cond") };
       d.coverage = Number(fd.get("coverage"));
       if (!(d.coverage >= 1 && d.coverage <= 100)) errs.coverage = "Enter 1–100";
-      const ns = fd.get("ns");
-      d.namespace = ns ? { id: ns, range: fd.get("ns0") != null ? [Number(fd.get("ns0")), Number(fd.get("ns1"))] : d.namespace?.id === ns ? d.namespace.range : [0, 50] } : null;
-      if (d.namespace) {
-        const [a, b] = d.namespace.range;
-        if (!(a >= 0 && b <= 100 && a < b)) errs.ns = "The range must go from a lower to a higher number between 0 and 100";
-        else {
-          const clash = S.namespaceClash(d);
-          if (clash) errs.ns = `Overlaps “${clash.name}” (${clash.namespace.range.join("–")}%), which is ${clash.status}. Starting will be blocked until the ranges don't overlap.`;
-        }
-      }
       d.assignment = { hashAttribute: fd.get("hash"), fallback: fd.get("fallback") || "", sticky: !!fd.get("sticky") };
-      if (errs.ns && errs.ns.startsWith("Overlaps")) errs.nsWarn = errs.ns, delete errs.ns;
     } else if (k === "metrics") {
       d.primaryMetric = fd.get("primary") || null;
       d.secondaryMetrics = fd.getAll("secondary").filter((m) => m !== d.primaryMetric);
@@ -301,8 +287,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
 
   const showErrs = (form, errs) => {
     form.querySelectorAll("[data-err]").forEach((x) => (x.innerHTML = errs[x.dataset.err] ? `<div class="err">${icon.warn(14)} ${esc(errs[x.dataset.err])}</div>` : ""));
-    if (errs.nsWarn) form.querySelector("[data-err=ns]").innerHTML = `<div class="err" style="color:#92400E">${icon.warn(14)} ${esc(errs.nsWarn)}</div>`;
-    const first = Object.keys(errs).find((k) => k !== "nsWarn");
+    const first = Object.keys(errs)[0];
     if (first) form.querySelector(`[data-err="${first}"]`)?.closest(".field")?.scrollIntoView({ block: "center", behavior: "smooth" });
     return !!first;
   };
@@ -377,12 +362,8 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     }
     if (k === "targeting") {
       bindConditions(form, "cond", () => d.targeting.conditions, (c) => (d.targeting.conditions = c));
-      form.ns.addEventListener("change", () => {
-        collect(form);
-        paint();
-      });
       const reach = () => {
-        const tmp = { ...d, targeting: { ...d.targeting, conditions: readConditions(form, "cond"), savedGroups: readSavedGroups(form), audience: form.audience.value, excludeLeads: form.excludeLeads.checked } };
+        const tmp = { ...d, targeting: { ...d.targeting, conditions: readConditions(form, "cond"), audience: form.audience.value, excludeLeads: form.excludeLeads.checked } };
         const p = S.page(d.pageId);
         const dev = form.device.value === "mobile" ? 0.62 : form.device.value === "desktop" ? 0.38 : 1;
         const daily = (p?.traffic ?? 0) * (Number(form.coverage.value) / 100) * targetingFactor(tmp.targeting, tmp) * dev;

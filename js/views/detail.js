@@ -8,7 +8,7 @@ import { lineChart } from "../chart.js";
 import * as Sim from "../sim.js";
 import { compare } from "../stats.js";
 import { metricOptions, powerTable, customFieldInputs } from "./create.js";
-import { conditionEditor, bindConditions, savedGroupPicker, readSavedGroups, namespaceBar, HASH_ATTRS, condText } from "./targeting.js";
+import { conditionEditor, bindConditions, HASH_ATTRS, condText, CONDITIONS_INTRO } from "./targeting.js";
 import { RESULT_LABEL } from "../store.js";
 
 // Results view settings, per experiment (reports keep their own).
@@ -72,8 +72,7 @@ function header(e, tab) {
 
 /* ---------- Overview ---------- */
 export function targetingSummary(t) {
-  return [t.audience !== "all" ? `${t.audience} visitors` : "All visitors", t.device !== "all" ? `${t.device} only` : "", ...(t.conditions || []).map(condText),
-    ...(t.savedGroups || []).map((g) => `${g.mode === "exclude" ? "excluding" : "only"} ${S.savedGroup(g.id)?.name || "deleted group"}`), t.excludeLeads ? "excluding existing leads" : ""].filter(Boolean).join(" · ");
+  return [t.audience !== "all" ? `${t.audience} visitors` : "All visitors", t.device !== "all" ? `${t.device} only` : "", ...(t.conditions || []).map(condText), t.excludeLeads ? "excluding existing leads" : ""].filter(Boolean).join(" · ");
 }
 
 function overview(e) {
@@ -130,12 +129,8 @@ function overview(e) {
       <div class="row"><div class="grow field"><label for="t-aud">Audience</label><select id="t-aud" class="inp" data-t="audience" ${edV ? "" : "disabled"}>${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="t-dev">Device</label><select id="t-dev" class="inp" data-t="device" ${edV ? "" : "disabled"}>${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="t-cov">Rollout · share of visitors in test</label><div class="pct-input"><input id="t-cov" class="inp" type="number" min="0" max="100" data-coverage value="${e.coverage}" ${edV ? "" : "disabled"}><span>%</span></div></div></div>
-      <div class="field"><span class="label">Attribute conditions</span>${conditionEditor(t.conditions || [], { disabled: !edV, prefix: "ov" })}</div>
-      <div class="field" data-sg><span class="label">Saved groups</span>${savedGroupPicker(t.savedGroups || [], { disabled: !edV, name: "ovsg" })}</div>
+      <div class="field"><span class="label">Attribute conditions</span>${edV ? CONDITIONS_INTRO : ""}${conditionEditor(t.conditions || [], { disabled: !edV, prefix: "ov" })}</div>
       <label class="check" style="margin-bottom:16px"><input type="checkbox" data-t="excludeLeads" ${t.excludeLeads ? "checked" : ""} ${edV ? "" : "disabled"}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
-      <div class="row"><div class="grow field"><label for="t-ns">Namespace</label><select id="t-ns" class="inp" data-ns ${edV ? "" : "disabled"}><option value="">None</option>${st.namespaces.map((n) => `<option value="${n.id}" ${e.namespace?.id === n.id ? "selected" : ""}>${esc(n.name)}</option>`).join("")}</select></div>
-        ${e.namespace ? `<div class="grow field"><span class="label">Range</span><div class="row" style="flex-wrap:nowrap"><div class="pct-input" style="width:100px"><input class="inp" type="number" min="0" max="99" data-nsr="0" value="${e.namespace.range[0]}" aria-label="Namespace from" ${edV ? "" : "disabled"}><span>%</span></div><span>to</span><div class="pct-input" style="width:100px"><input class="inp" type="number" min="1" max="100" data-nsr="1" value="${e.namespace.range[1]}" aria-label="Namespace to" ${edV ? "" : "disabled"}><span>%</span></div></div></div>` : `<div class="grow"></div>`}</div>
-      ${e.namespace ? `<div style="margin:-4px 0 16px">${namespaceBar(e.namespace.id, e.namespace.range, e.id)}</div>` : ""}
       <div class="row"><div class="grow field"><label for="t-hash">Assign variants by</label><select id="t-hash" class="inp" data-asg="hashAttribute" ${edV ? "" : "disabled"}>${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${e.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="t-fb">Fallback</label><select id="t-fb" class="inp" data-asg="fallback" ${edV ? "" : "disabled"}><option value="">None (skip the visitor)</option>${HASH_ATTRS.filter(([k]) => k !== e.assignment.hashAttribute).map(([k, l]) => `<option value="${k}" ${e.assignment.fallback === k ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
       <label class="check"><input type="checkbox" data-asg="sticky" ${e.assignment.sticky ? "checked" : ""} ${edV ? "" : "disabled"}><span><span class="t1">Sticky bucketing</span><span class="t2">Keep visitors in the same variant even if the split or targeting changes. After a form submit they're matched by lead ID.</span></span></label>
@@ -503,24 +498,7 @@ export function bind(root, rerender, { id }) {
       e.targeting.conditions = c;
       if (JSON.stringify(c) !== before) commit(c.length ? `Set targeting conditions: ${c.map(condText).join(" AND ")}` : "Removed targeting conditions");
     });
-    root.querySelectorAll("[data-sg] select").forEach((s) => s.addEventListener("change", () => {
-      e.targeting.savedGroups = readSavedGroups(root, "ovsg");
-      commit("Changed saved-group targeting");
-    }));
   }
-  root.querySelector("[data-ns]")?.addEventListener("change", (ev) => {
-    e.namespace = ev.target.value ? { id: ev.target.value, range: e.namespace?.range || [0, 50] } : null;
-    commit(e.namespace ? `Put the experiment in namespace “${S.namespace(e.namespace.id)?.name}”` : "Removed the namespace");
-  });
-  root.querySelectorAll("[data-nsr]").forEach((inp) => inp.addEventListener("change", () => {
-    const r = [...e.namespace.range];
-    r[Number(inp.dataset.nsr)] = Math.max(0, Math.min(100, Number(inp.value) || 0));
-    if (r[0] >= r[1]) return toast("The range must go from a lower to a higher number", "bad");
-    e.namespace.range = r;
-    const clash = S.namespaceClash(e);
-    commit(`Set the namespace range to ${r.join("–")}%`);
-    if (clash) toast(`Overlaps “${clash.name}”. Starting is blocked until the ranges don't overlap.`, "bad");
-  }));
   root.querySelectorAll("[data-asg]").forEach((inp) => inp.addEventListener("change", () => {
     const k = inp.dataset.asg;
     e.assignment[k] = inp.type === "checkbox" ? inp.checked : inp.value;

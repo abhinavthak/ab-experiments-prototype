@@ -55,11 +55,6 @@ export function targetingFactor(t = {}, e = {}) {
   if (t.audience === "returning") f *= 0.3;
   if (t.excludeLeads) f *= 0.95;
   (t.conditions || []).forEach(() => (f *= 0.6));
-  (t.savedGroups || []).forEach((g) => {
-    const sg = S.savedGroup(g.id);
-    f *= g.mode === "exclude" ? 1 - (sg?.reach ?? 0.1) : sg?.reach ?? 0.5;
-  });
-  if (e.namespace?.id) f *= Math.max(0, (e.namespace.range[1] - e.namespace.range[0]) / 100);
   return f;
 }
 
