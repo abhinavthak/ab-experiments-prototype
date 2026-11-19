@@ -137,21 +137,32 @@ const normTag = (t) => String(t).trim().toLowerCase().replace(/,/g, "");
 const knownTags = () => [...new Set(S.get().experiments.flatMap((e) => e.tags || []))].sort();
 
 export function tagPicker({ id, name = "tags", selected = [], placeholder = "Add tags" }) {
-  return `<div class="tagpick" data-tagpick>
+  return `<div class="tagpick" data-tagpick data-create="1" data-ph="${esc(placeholder)}">
     <input type="hidden" name="${esc(name)}" value="${esc(selected.join(","))}">
-    <div class="tp-box">${selected.map(tpChip).join("")}<input id="${esc(id)}" class="tp-in" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" placeholder="${selected.length ? "" : esc(placeholder)}"></div>
+    <div class="tp-box">${selected.map((t) => tpChip(t)).join("")}<input id="${esc(id)}" class="tp-in" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" placeholder="${selected.length ? "" : esc(placeholder)}"></div>
     <div class="tp-menu" role="listbox" aria-multiselectable="true" hidden></div>
   </div>`;
 }
-const tpChip = (t) => `<span class="tp-chip">${esc(t)}<button type="button" class="tp-x" data-tag="${esc(t)}" aria-label="Remove ${esc(t)}">×</button></span>`;
+// Same control for a fixed list of options ([value, label] pairs), e.g. metrics.
+export function multiPicker({ id, name, options, selected = [], placeholder = "Add" }) {
+  const label = (v) => options.find(([x]) => x === v)?.[1] || v;
+  return `<div class="tagpick" data-tagpick data-create="0" data-ph="${esc(placeholder)}" data-opts="${esc(JSON.stringify(options))}">
+    <input type="hidden" name="${esc(name)}" value="${esc(selected.join(","))}">
+    <div class="tp-box">${selected.map((v) => tpChip(v, label(v))).join("")}<input id="${esc(id)}" class="tp-in" autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list" placeholder="${selected.length ? "" : esc(placeholder)}"></div>
+    <div class="tp-menu" role="listbox" aria-multiselectable="true" hidden></div>
+  </div>`;
+}
+const tpOpts = (w) => (w.dataset.opts ? JSON.parse(w.dataset.opts) : null);
+const tpLabel = (w, v) => tpOpts(w)?.find(([x]) => x === v)?.[1] || v;
+const tpChip = (t, label = t) => `<span class="tp-chip">${esc(label)}<button type="button" class="tp-x" data-tag="${esc(t)}" aria-label="Remove ${esc(label)}">×</button></span>`;
 const tpGet = (w) => (w.querySelector("input[type=hidden]").value || "").split(",").filter(Boolean);
 
 function tpSet(w, tags, keepOpen = true) {
   w.querySelector("input[type=hidden]").value = tags.join(",");
   const inp = w.querySelector(".tp-in");
   w.querySelectorAll(".tp-chip").forEach((c) => c.remove());
-  inp.insertAdjacentHTML("beforebegin", tags.map(tpChip).join(""));
-  inp.placeholder = tags.length ? "" : "Add tags";
+  inp.insertAdjacentHTML("beforebegin", tags.map((t) => tpChip(t, tpLabel(w, t))).join(""));
+  inp.placeholder = tags.length ? "" : w.dataset.ph || "";
   if (keepOpen) tpPaint(w);
 }
 
@@ -160,12 +171,14 @@ function tpPaint(w) {
   const m = w.querySelector(".tp-menu");
   const q = normTag(inp.value);
   const sel = tpGet(w);
-  const opts = [...new Set([...knownTags(), ...sel])].filter((t) => !q || t.includes(q));
-  const create = q && !opts.includes(q) ? `<button type="button" class="tp-opt" data-tp-add="${esc(q)}">${icon.plus(16)} Create “${esc(q)}”</button>` : "";
-  m.innerHTML = opts.map((t) => {
-    const on = sel.includes(t);
-    return `<button type="button" class="tp-opt${on ? " on" : ""}" role="option" aria-selected="${on}" data-tp-toggle="${esc(t)}"><span class="tp-box2" aria-hidden="true">${on ? "✓" : ""}</span>${esc(t)}</button>`;
-  }).join("") + create || `<div class="tp-empty">Type a tag and press Enter</div>`;
+  const fixed = tpOpts(w);
+  const all = fixed || [...new Set([...knownTags(), ...sel])].map((t) => [t, t]);
+  const opts = all.filter(([, l]) => !q || l.toLowerCase().includes(q));
+  const create = w.dataset.create === "1" && q && !opts.some(([v]) => v === q) ? `<button type="button" class="tp-opt" data-tp-add="${esc(q)}">${icon.plus(16)} Create “${esc(q)}”</button>` : "";
+  m.innerHTML = opts.map(([v, l]) => {
+    const on = sel.includes(v);
+    return `<button type="button" class="tp-opt${on ? " on" : ""}" role="option" aria-selected="${on}" data-tp-toggle="${esc(v)}"><span class="tp-box2" aria-hidden="true">${on ? "✓" : ""}</span>${esc(l)}</button>`;
+  }).join("") + create || `<div class="tp-empty">${w.dataset.create === "1" ? "Type a tag and press Enter" : "No matches"}</div>`;
   const wasHidden = m.hidden;
   m.hidden = false;
   inp.setAttribute("aria-expanded", "true");
@@ -180,6 +193,13 @@ function tpClose(w) {
 }
 
 function tpAdd(w, raw) {
+  if (w.dataset.create !== "1") {
+    const q = normTag(raw);
+    const hit = q && tpOpts(w)?.find(([, l]) => l.toLowerCase().includes(q));
+    w.querySelector(".tp-in").value = "";
+    if (hit && !tpGet(w).includes(hit[0])) return tpSet(w, [...tpGet(w), hit[0]]);
+    return tpPaint(w);
+  }
   const t = normTag(raw);
   const inp = w.querySelector(".tp-in");
   inp.value = "";
@@ -217,7 +237,10 @@ document.addEventListener("focusin", (ev) => {
 document.addEventListener("focusout", (ev) => {
   const w = ev.target.closest?.("[data-tagpick]");
   if (w && ev.target.classList.contains("tp-in")) {
-    if (ev.target.value.trim()) tpAdd(w, ev.target.value);
+    if (ev.target.value.trim()) {
+      if (w.dataset.create === "1") tpAdd(w, ev.target.value);
+      else ev.target.value = "";
+    }
     setTimeout(() => { if (!w.contains(document.activeElement)) tpClose(w); }, 0);
   }
 });

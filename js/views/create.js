@@ -2,7 +2,7 @@
 //   Overview → Page & variants → Targeting → Metrics → Analysis → Review.
 // Also: "Analyze a past experiment" (import), and the power estimate.
 import * as S from "../store.js";
-import { openModal, closeModal, icon, variantChip, chip, callout, tagPicker } from "../ui.js";
+import { openModal, closeModal, icon, variantChip, chip, callout, tagPicker, multiPicker } from "../ui.js";
 import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS, uid } from "../util.js";
 import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
@@ -76,7 +76,7 @@ export function powerEstimate(e, mdes = [0.05, 0.1, 0.15, 0.2]) {
   }) };
 }
 
-export function powerTable(e) {
+export function powerTable(e, { compact = false } = {}) {
   const pe = powerEstimate(e);
   if (!pe) return `<div class="faint">Pick a page and a primary metric to estimate how long this will take.</div>`;
   const planned = e.plannedMde ?? 0.1;
@@ -115,9 +115,17 @@ export function powerTable(e) {
       ? callout("warn", `To detect a ${p} lift this test needs about ${dur(plannedRow.days)}, but it stops after ${e.stopAfterDays} days. Run it longer, raise the rollout or accept a bigger minimum lift.`)
       : callout("good", `${e.stopAfterDays} days is enough to detect a ${p} lift (needs about ${dur(plannedRow.days)}).`);
   })();
-  return `${facts}${verdict}${table}`;
+  return compact ? `${facts}${verdict}<details class="adv"><summary>Days needed for other lifts</summary><div style="margin-top:10px">${table}</div></details>` : `${facts}${verdict}${table}`;
 }
 
+const STEP_HEAD = {
+  basics: ["What are you testing?", "Name it and say what you expect to happen."],
+  variants: ["What will visitors see?", "Pick the page and the versions to compare."],
+  targeting: ["Who's in the test?", "Everyone who visits the page, unless you narrow it down."],
+  metrics: ["How will you pick a winner?", "One metric decides. Guardrails catch harm."],
+  analysis: ["How long will it run?", "Set a stop date and the smallest lift you care about."],
+  review: ["Check and create", "Creating saves a draft. Nothing goes live until you start it."],
+};
 const STEPS = [["basics", "Overview"], ["variants", "Page & variants"], ["targeting", "Targeting"], ["metrics", "Metrics"], ["analysis", "Analysis"], ["review", "Review"]];
 
 export function openCreate(prefPageId, { type = "standard" } = {}) {
@@ -169,26 +177,33 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   let step = 0;
   let seen = 0;
   let keyTouched = false;
+  let statsOpen = false;
   let dirty = false;
 
   const steps = {
-    basics: () => `
-      <div class="field"><span class="label">Experiment type</span><div class="type-cards" role="radiogroup" aria-label="Experiment type">
-        ${[["standard", "A/B test", "Fixed split. Compare variants against Control and pick a winner with confidence."], ["bandit", "Multi-armed bandit", "Sends more traffic to the best-performing variant each day, to get more conversions while you learn."]]
-          .map(([k, t, s]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${s}</span></span></label>`).join("")}</div></div>
-      <div class="field"><label for="c-name">Experiment name</label><input id="c-name" name="name" class="inp" autocomplete="off" value="${esc(d.name)}" placeholder="e.g. Online BBA — banner &amp; sticky CTA"><div data-err="name"></div></div>
-      <div class="field"><label for="c-key">Tracking key</label><input id="c-key" name="key" class="inp mono" autocomplete="off" value="${esc(d.trackingKey)}"><div class="hint">Sent with every exposure and lead. Lowercase letters, numbers and hyphens. Locked once started.</div><div data-err="key"></div></div>
-      <div class="field"><label for="c-hyp">Hypothesis ${st.settings.requireHypothesis ? "" : `<span class="opt">· optional</span>`}</label><textarea id="c-hyp" name="hypothesis" class="inp" placeholder="If we … then … because …">${esc(d.hypothesis)}</textarea><div data-err="hypothesis"></div></div>
-      <div class="field"><label for="c-desc">Description <span class="opt">· optional</span></label><textarea id="c-desc" name="description" class="inp" style="min-height:64px">${esc(d.description)}</textarea></div>
-      <div class="row"><div class="grow field"><label for="c-tags">Tags <span class="opt">· optional</span></label>${tagPicker({ id: "c-tags", selected: d.tags })}</div>
-        <div class="grow field"><label for="c-owner">Owner</label><select id="c-owner" name="owner" class="inp">${S.USERS.map((u) => `<option value="${u.id}" ${u.id === d.ownerId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div></div>
-      ${customFieldInputs(d)}`,
+    basics: () => {
+      const cfs = st.customFields;
+      const needCf = cfs.some((f) => f.required);
+      return `
+      <div class="field"><span class="label">Type</span><div class="type-cards compact" role="radiogroup" aria-label="Experiment type">
+        ${[["standard", "A/B test", "Fixed split; pick a winner with confidence."], ["bandit", "Multi-armed bandit", "Shifts traffic to the best variant each day."]]
+          .map(([k, t, sub]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>
+      <div class="field"><label for="c-name">Name</label><input id="c-name" name="name" class="inp" autocomplete="off" value="${esc(d.name)}" placeholder="e.g. Online BBA — banner &amp; sticky CTA">
+        <div class="key-line">Tracking key <span class="mono" data-keytext>${esc(d.trackingKey) || "—"}</span> <button type="button" class="link-btn" data-local="key-edit">Edit</button></div><div data-err="name"></div></div>
+      <div class="field" data-keyfield ${keyTouched ? "" : "hidden"}><label for="c-key">Tracking key</label><input id="c-key" name="key" class="inp mono" autocomplete="off" value="${esc(d.trackingKey)}"><div class="hint">Sent with every exposure and lead. Lowercase letters, numbers and hyphens. Locked once started.</div><div data-err="key"></div></div>
+      <div class="field"><label for="c-hyp">Hypothesis ${st.settings.requireHypothesis ? "" : `<span class="opt">· optional</span>`}</label><textarea id="c-hyp" name="hypothesis" class="inp" rows="3" placeholder="If we … then … because …">${esc(d.hypothesis)}</textarea><div data-err="hypothesis"></div></div>
+      <div class="row"><div class="grow field"><label for="c-owner">Owner</label><select id="c-owner" name="owner" class="inp">${S.USERS.map((u) => `<option value="${u.id}" ${u.id === d.ownerId ? "selected" : ""}>${esc(u.name)}</option>`).join("")}</select></div>
+        <div class="grow field"><label for="c-tags">Tags <span class="opt">· optional</span></label>${tagPicker({ id: "c-tags", selected: d.tags })}</div></div>
+      <details class="adv" ${needCf || d.description ? "open" : ""}><summary>More details <span class="opt">· description${cfs.length ? `, ${cfs.map((f) => esc(f.name.toLowerCase())).join(", ")}` : ""}</span></summary>
+        <div style="margin-top:12px"><div class="field"><label for="c-desc">Description <span class="opt">· optional</span></label><textarea id="c-desc" name="description" class="inp" rows="2">${esc(d.description)}</textarea></div>
+        ${customFieldInputs(d)}</div></details>`;
+    },
     variants: () => {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
       const isUrl = d.testKind === "url";
-      const kindCards = `<div class="field"><span class="label">What are you comparing?</span><div class="type-cards" role="radiogroup" aria-label="What are you comparing">
-        ${[["variants", "Original vs variant", "Same URL. The CMS swaps sections of this page using the variants you built in the page editor."], ["url", "URL vs URL", "Split URL. Some visitors are redirected to a different page, e.g. a redesigned landing page."]]
+      const kindCards = `<div class="field"><span class="label">What are you comparing?</span><div class="type-cards compact" role="radiogroup" aria-label="What are you comparing">
+        ${[["variants", "Original vs variant", "Same URL; the CMS swaps sections of the page."], ["url", "URL vs URL", "Split URL; some visitors are redirected to another page."]]
           .map(([k, t, sub]) => `<label class="check ${d.testKind === k ? "on" : ""}"><input type="radio" name="kind" value="${k}" ${d.testKind === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
       const pageWhy = (x) => {
         if (isUrl) {
@@ -211,7 +226,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         ${p ? `<div class="hint">Visitors land on <span class="mono">${esc(p.path)}</span>. A stays there; the others are redirected.</div>` : ""}<div data-err="page"></div></div>
         ${conflict}${p ? urlStep() : ""}`;
       return `${kindCards}${pageField}
-        ${p ? `<div class="hint mono">${esc(p.path)}</div>` : `<div class="hint">Variants are served on the same URL; the CMS swaps sections.</div>`}<div data-err="page"></div></div>
+        ${p ? `<div class="hint mono">${esc(p.path)}</div>` : ""}<div data-err="page"></div></div>
       ${conflict}
       ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants ${d.type === "bandit" ? "· arms" : "& split"}</span>
         ${p.variants.map((v) => {
@@ -224,38 +239,42 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         <div class="row" style="justify-content:space-between;margin-top:10px">${d.type === "bandit" ? `<span class="hint" style="margin:0">Starts even, then re-weights daily toward the best arm (never below 2%).</span>` : `<button type="button" class="btn xs" data-local="even">Split evenly</button><b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b>`}</div>
         <div data-err="variants"></div><div data-err="split"></div>
         <a href="#/page/${p.id}" data-act="modal-close-nav" class="hint" style="display:inline-block">Create or edit variants in the page editor →</a></div>`}
-      ${p && p.variants.length < 2 ? `<div style="border:1px dashed var(--text-4);border-radius:12px;padding:24px;text-align:center"><b>${esc(p.name)} has only its default variant</b><div class="muted" style="margin:6px 0 14px">Create at least one more variant in the page editor, then come back.</div><a class="btn sm" href="#/page/${p.id}" data-act="modal-close-nav">${icon.ext()} Open page editor</a></div>` : ""}
-      ${vs.length ? `<div class="small">Control: ${esc(vs[0].key)} · ${esc(vs[0].name)}</div>` : ""}`;
+      ${p && p.variants.length < 2 ? `<div style="border:1px dashed var(--text-4);border-radius:12px;padding:24px;text-align:center"><b>${esc(p.name)} has only its default variant</b><div class="muted" style="margin:6px 0 14px">Create at least one more variant in the page editor, then come back.</div><a class="btn sm" href="#/page/${p.id}" data-act="modal-close-nav">${icon.ext()} Open page editor</a></div>` : ""}`;
     },
     targeting: () => {
       const t = d.targeting;
+      const hashLabel = HASH_ATTRS.find(([k]) => k === d.assignment.hashAttribute)?.[1] || "";
       return `<div class="row"><div class="grow field"><label for="c-aud">Audience</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-</div>
-      <div class="field"><span class="label">Attribute conditions <span class="opt">· optional</span></span>${CONDITIONS_INTRO}${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
-      <label class="check" style="margin-bottom:16px"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
-      <div class="field"><label for="c-cov">Rollout · share of eligible visitors in the test</label><div class="pct-input" style="max-width:200px"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div><div data-err="coverage"></div></div>
-            <details class="adv"><summary>Assignment</summary>
-        <div class="row" style="margin-top:12px"><div class="grow field"><label for="c-hash">Assign variants by</label><select id="c-hash" name="hash" class="inp">${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${d.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="field" style="width:150px"><label for="c-cov">Rollout</label><div class="pct-input"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div></div></div>
+      <div data-err="coverage"></div>
+      <div class="reach" data-reach></div>
+      <div class="field"><span class="label">Only include visitors who match <span class="opt">· optional</span></span><div class="hint" style="margin:0 0 10px">Each rule reads as a sentence. A visitor must match every rule; everyone else sees the original and isn't counted.</div>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
+      <details class="adv"><summary>Advanced <span class="opt">· ${t.excludeLeads ? "excluding existing leads · " : ""}assigned by ${esc(hashLabel.toLowerCase())}${d.assignment.sticky ? ", sticky" : ""}</span></summary>
+        <label class="check" style="margin:12px 0"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
+        <div class="row"><div class="grow field"><label for="c-hash">Assign variants by</label><select id="c-hash" name="hash" class="inp">${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${d.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
           <div class="grow field"><label for="c-fb">Fallback <span class="opt">· if missing</span></label><select id="c-fb" name="fallback" class="inp"><option value="">None (skip the visitor)</option>${HASH_ATTRS.filter(([k]) => k !== d.assignment.hashAttribute).map(([k, l]) => `<option value="${k}" ${d.assignment.fallback === k ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
-        <label class="check"><input type="checkbox" name="sticky" ${d.assignment.sticky ? "checked" : ""}><span><span class="t1">Sticky bucketing</span><span class="t2">Keep visitors in their variant even if the split or targeting changes later</span></span></label></details>
-      <div class="hint" data-reach></div>`;
+        <label class="check"><input type="checkbox" name="sticky" ${d.assignment.sticky ? "checked" : ""}><span><span class="t1">Sticky bucketing</span><span class="t2">Keep visitors in their variant even if the split or targeting changes later</span></span></label></details>`;
     },
     metrics: () => {
       const p = S.page(d.pageId);
-      const box = (kind, list) => `<div class="row" style="gap:8px">${st.metrics.filter((m) => !(m.requires === "leadForm" && p && !p.hasLeadForm)).map((m) => `<label class="badge ${list.includes(m.id) ? "blue" : ""}" style="padding:6px 10px;cursor:pointer;font-weight:500"><input type="checkbox" name="${kind}" value="${m.id}" ${list.includes(m.id) ? "checked" : ""} style="accent-color:var(--primary)"> ${esc(m.name)}</label>`).join("")}</div>`;
-      return `<div class="field"><label for="c-primary">${d.type === "bandit" ? "Decision metric" : "Primary metric"} <span class="opt">· picks the winner</span></label><select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div data-err="primary"></div></div>
-        <div class="field"><span class="label">Secondary metrics <span class="opt">· explain why</span></span>${box("secondary", d.secondaryMetrics)}</div>
-        <div class="field"><span class="label">Guardrails <span class="opt">· flagged if a variant makes them worse</span></span>${box("guardrail", d.guardrailMetrics)}</div>
-        <div class="field"><label for="c-act">Activation metric <span class="opt">· optional</span></label><select id="c-act" name="activation" class="inp">${metricOptions(d.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only visitors who did this are analysed, e.g. only those who scrolled to the fee section.</div></div>`;
+      const opts = st.metrics.filter((m) => !(m.requires === "leadForm" && p && !p.hasLeadForm)).map((m) => [m.id, m.name]);
+      return `<div class="field"><label for="c-primary">${d.type === "bandit" ? "Decision metric" : "Primary metric"}</label><select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div class="hint">The one number that decides the winner.</div><div data-err="primary"></div></div>
+        <div class="row"><div class="grow field"><label for="c-guard">Guardrails <span class="opt">· optional</span></label>${multiPicker({ id: "c-guard", name: "guardrail", options: opts, selected: d.guardrailMetrics, placeholder: "e.g. Bounce rate" })}<div class="hint">Flagged if a variant makes them worse.</div></div>
+          <div class="grow field"><label for="c-sec">Secondary <span class="opt">· optional</span></label>${multiPicker({ id: "c-sec", name: "secondary", options: opts, selected: d.secondaryMetrics, placeholder: "Add metrics" })}<div class="hint">Help explain why the winner won.</div></div></div>
+        <details class="adv" ${d.activationMetric ? "open" : ""}><summary>Activation metric <span class="opt">· optional</span></summary>
+          <div class="field" style="margin:12px 0 0"><label class="sr-only" for="c-act">Activation metric</label><select id="c-act" name="activation" class="inp">${metricOptions(d.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only analyse visitors who did this, e.g. scrolled to the fee section.</div></div></details>`;
     },
-    analysis: () => `
-      <div class="field"><span class="label">Stats engine</span><div class="type-cards">${[["bayesian", "Bayesian", "Chance to beat Control, and risk"], ["frequentist", "Frequentist", "p-values and confidence intervals"]].map(([k, t, s]) => `<label class="check ${d.statsEngine === k ? "on" : ""}"><input type="radio" name="engine" value="${k}" ${d.statsEngine === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${s}</span></span></label>`).join("")}</div></div>
-      <label class="check" style="margin-bottom:8px"><input type="checkbox" name="sequential" ${d.sequential ? "checked" : ""} ${d.statsEngine === "frequentist" ? "" : "disabled"}><span><span class="t1">Sequential testing</span><span class="t2">Frequentist only. Safe to check results any time.</span></span></label>
-      <label class="check" style="margin-bottom:16px"><input type="checkbox" name="cuped" ${d.cuped ? "checked" : ""}><span><span class="t1">CUPED variance reduction</span><span class="t2">Uses pre-test behaviour to tighten intervals</span></span></label>
-      <div class="row"><div class="grow field"><label for="c-stop">Stop</label><select id="c-stop" name="stop" class="inp">${[null, 7, 14, 21, 28, 42].map((o) => `<option value="${o ?? ""}" ${o === d.stopAfterDays ? "selected" : ""}>${o ? `${o} days after start` : "Manually"}</option>`).join("")}</select></div>
+    analysis: () => {
+      const engine = d.statsEngine === "bayesian" ? "Bayesian" : `Frequentist${d.sequential ? ", sequential" : ""}`;
+      return `<div class="row"><div class="grow field"><label for="c-stop">Stop</label><select id="c-stop" name="stop" class="inp">${[null, 7, 14, 21, 28, 42].map((o) => `<option value="${o ?? ""}" ${o === d.stopAfterDays ? "selected" : ""}>${o ? `${o} days after start` : "Manually"}</option>`).join("")}</select></div>
         <div class="grow field"><label for="c-mde">Smallest lift worth detecting</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div>
-      <div class="field"><span class="label">How long will it take?</span>${powerTable(d)}</div>`,
+      ${powerTable(d, { compact: true })}
+      <details class="adv" data-stats ${statsOpen ? "open" : ""}><summary>Statistics <span class="opt">· ${engine}${d.cuped ? ", CUPED" : ""}</span></summary>
+        <div style="margin-top:12px"><div class="type-cards compact" style="margin-bottom:10px">${[["bayesian", "Bayesian", "Chance to beat Control, and risk"], ["frequentist", "Frequentist", "p-values and confidence intervals"]].map(([k, t, sub]) => `<label class="check ${d.statsEngine === k ? "on" : ""}"><input type="radio" name="engine" value="${k}" ${d.statsEngine === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div>
+        <label class="check" style="margin-bottom:8px"><input type="checkbox" name="sequential" ${d.sequential ? "checked" : ""} ${d.statsEngine === "frequentist" ? "" : "disabled"}><span><span class="t1">Sequential testing</span><span class="t2">Frequentist only. Safe to check results any time.</span></span></label>
+        <label class="check"><input type="checkbox" name="cuped" ${d.cuped ? "checked" : ""}><span><span class="t1">CUPED variance reduction</span><span class="t2">Uses pre-test behaviour to tighten intervals</span></span></label></div></details>`;
+    },
     review: () => {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
@@ -386,8 +405,9 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       d.assignment = { hashAttribute: fd.get("hash"), fallback: fd.get("fallback") || "", sticky: !!fd.get("sticky") };
     } else if (k === "metrics") {
       d.primaryMetric = fd.get("primary") || null;
-      d.secondaryMetrics = fd.getAll("secondary").filter((m) => m !== d.primaryMetric);
-      d.guardrailMetrics = fd.getAll("guardrail").filter((m) => m !== d.primaryMetric);
+      const list = (n) => String(fd.get(n) || "").split(",").filter((m) => m && m !== d.primaryMetric);
+      d.secondaryMetrics = list("secondary");
+      d.guardrailMetrics = list("guardrail");
       d.activationMetric = fd.get("activation") || null;
       if (!d.primaryMetric) errs.primary = "Choose a primary metric";
     } else if (k === "analysis") {
@@ -401,6 +421,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   };
 
   const showErrs = (form, errs) => {
+    if (errs.key) form.querySelector("[data-keyfield]")?.removeAttribute("hidden");
     form.querySelectorAll("[data-err]").forEach((x) => (x.innerHTML = errs[x.dataset.err] ? `<div class="err">${icon.warn(14)} ${esc(errs[x.dataset.err])}</div>` : ""));
     const first = Object.keys(errs)[0];
     if (first) form.querySelector(`[data-err="${first}"]`)?.closest(".field")?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -410,9 +431,10 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   let formRef = null;
   const paint = () => {
     const form = formRef;
-    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-body">${steps[STEPS[step][0]]()}</div>`;
+    const [hq, hs] = STEP_HEAD[STEPS[step][0]];
+    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-head"><h3>${hq}</h3><p>${hs}</p></div><div class="step-body">${steps[STEPS[step][0]]()}</div>`;
     form.querySelector(".modal-f").innerHTML = footer();
-    form.querySelector("#modal-title").textContent = `New ${d.type === "bandit" ? "bandit" : "A/B test"} · ${STEPS[step][1]}`;
+    form.querySelector("#modal-title").textContent = "New experiment";
     wire(form);
     form.querySelector(".modal-b").scrollTop = 0;
     form.querySelector(".step-body input:not([type=hidden]):not([disabled]):not([type=radio]), .step-body select, .step-body textarea")?.focus();
@@ -439,12 +461,22 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         d.type = r.value;
         if (d.type === "bandit" && S.metric(d.primaryMetric)?.type !== "binomial") d.primaryMetric = null;
         form.querySelectorAll(".type-cards .check").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked));
-        form.querySelector("#modal-title").textContent = `New ${d.type === "bandit" ? "bandit" : "A/B test"} · ${STEPS[step][1]}`;
+        form.querySelector("#modal-title").textContent = "New experiment";
       }));
+      const keyText = form.querySelector("[data-keytext]");
       form.name.addEventListener("input", () => {
         if (!keyTouched) form.key.value = S.uniqueKey(slugify(form.name.value));
+        keyText.textContent = form.key.value || "—";
       });
-      form.key.addEventListener("input", () => (keyTouched = true));
+      form.key.addEventListener("input", () => {
+        keyTouched = true;
+        keyText.textContent = form.key.value || "—";
+      });
+      form.querySelector("[data-local=key-edit]").addEventListener("click", () => {
+        const f = form.querySelector("[data-keyfield]");
+        f.hidden = false;
+        form.key.focus();
+      });
     }
     if (k === "variants") {
       form.querySelectorAll("input[name=kind]").forEach((r) => r.addEventListener("change", () => {
@@ -504,6 +536,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     if (k === "targeting") {
       bindConditions(form, "cond", () => d.targeting.conditions, (c) => (d.targeting.conditions = c));
       const reach = () => {
+        if (STEPS[step][0] !== "targeting" || !form.querySelector("[data-reach]")) return;
         const tmp = { ...d, targeting: { ...d.targeting, conditions: readConditions(form, "cond"), audience: form.audience.value, excludeLeads: form.excludeLeads.checked } };
         const p = S.page(d.pageId);
         const dev = form.device.value === "mobile" ? 0.62 : form.device.value === "desktop" ? 0.38 : 1;
@@ -515,8 +548,9 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       reach();
     }
     if (k === "analysis") {
+      form.querySelector("[data-stats]")?.addEventListener("toggle", (ev) => (statsOpen = ev.target.open));
       form.addEventListener("change", (ev) => {
-        if (["engine", "stop", "mde"].includes(ev.target.name)) {
+        if (STEPS[step][0] === "analysis" && ["engine", "stop", "mde"].includes(ev.target.name)) {
           collect(form);
           paint();
         }
@@ -537,7 +571,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   };
 
   openModal({
-    title: "New A/B test",
+    title: "New experiment",
     wide: true,
     body: "",
     footer: " ",
