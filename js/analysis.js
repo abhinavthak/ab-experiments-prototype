@@ -46,6 +46,8 @@ export function metricBlock(e, mid, tot, { baseline = 0, kind = "secondary" } = 
   return { metric, rows, kind };
 }
 
+export const guardCutoff = (m) => m?.guardrailCutoff ?? 0.02;
+
 export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) {
   const vs = S.variantsOf(e);
   const phases = S.phasesOf(e);
@@ -89,7 +91,19 @@ export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) 
   const multi = all.reduce((a, v) => a + v.multi, 0);
   const multiRate = visitors ? multi / Math.max(1, all.reduce((a, v) => a + v.n, 0)) : 0;
   const multiBad = multiRate > st.multiExposureThreshold;
-  const guardFail = guardrails.flatMap((g) => g.rows.filter((r) => r.verdict === "lost").map((r) => ({ metric: g.metric, v: r.v })));
+  // Guardrails: each metric has a cutoff, the most it may get worse (relative).
+  // Fail = clearly worse (significant) AND the estimate is past the cutoff.
+  // Within cutoff = even the worst plausible value stays inside it. Otherwise: watch.
+  guardrails.forEach((g) => g.rows.forEach((r) => {
+    if (!r.r) return;
+    const cut = guardCutoff(g.metric);
+    const lowerIsBetter = g.metric.higherIsBetter === false;
+    const harm = lowerIsBetter ? r.r.lift : -r.r.lift;
+    const worst = lowerIsBetter ? r.r.ci[1] : -r.r.ci[0];
+    r.guard = { cut, harm, worst, status: !r.enough ? "pending" : r.verdict === "lost" && harm > cut ? "fail" : worst <= cut ? "pass" : "watch" };
+  }));
+  const guardFail = guardrails.flatMap((g) => g.rows.filter((r) => r.guard?.status === "fail").map((r) => ({ metric: g.metric, v: r.v, ...r.guard })));
+  const guardWatch = guardrails.flatMap((g) => g.rows.filter((r) => r.guard?.status === "watch").map((r) => ({ metric: g.metric, v: r.v, ...r.guard })));
   const lowData = primary ? primary.rows.some((r) => r.i !== b && !r.enough) : false;
 
   // Bandit: chance each arm is best on the primary metric.
@@ -135,7 +149,7 @@ export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) 
   }
 
   return { started: true, vs, tot, visitors, primary, secondary, guardrails, srm: { ...srmRes, observed, expected: expectedW, bad: srmBad }, multi: { count: multi, rate: multiRate, bad: multiBad },
-    noTraffic, collecting, lowData, guardFail, decision, daysRun, daily, engine, primaryConversions, bandit, phase: ph, phases, baseline: b };
+    noTraffic, collecting, lowData, guardFail, guardWatch, decision, daysRun, daily, engine, primaryConversions, bandit, phase: ph, phases, baseline: b };
 }
 
 // Average bandit weights over the phase (what SRM should expect).

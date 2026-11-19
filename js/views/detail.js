@@ -1,5 +1,5 @@
 import * as S from "../store.js";
-import { analyze, statusPill, metricBlock, statOpts } from "../analysis.js";
+import { analyze, statusPill, metricBlock, statOpts, guardCutoff } from "../analysis.js";
 import { can, why } from "../rules.js";
 import { acts, checklistHtml, createReport } from "../actions.js";
 import { icon, pill, variantChip, avatar, menu, menuItem, callout, lock, openModal, closeModal, tagPicker } from "../ui.js";
@@ -146,7 +146,7 @@ function overview(e) {
       <h2>Metrics</h2><div class="card-sub">One primary metric picks the winner. Secondary metrics help explain why; guardrails catch harm.</div>
       <div class="field"><label for="m-primary">${isBandit ? "Decision metric" : "Primary"} · one only</label>${can(e, "changePrimary") ? "" : `<div style="margin-bottom:6px">${lock(why(e, "changePrimary"))}</div>`}<select id="m-primary" class="inp" data-primary ${can(e, "changePrimary") ? "" : "disabled"}>${metricOptions(e.primaryMetric, p, { onlyBinomial: isBandit })}</select><div class="hint">Counted once per visitor, credited to the variant they saw, within ${S.metric(e.primaryMetric)?.windowHours ?? 72} hours of first exposure.</div></div>
       ${metricBox("secondaryMetrics", e.secondaryMetrics, `Secondary · ${e.secondaryMetrics.length}`, "Tracked for context.", can(e, "editSecondary"))}
-      ${metricBox("guardrailMetrics", e.guardrailMetrics, `Guardrails · ${e.guardrailMetrics.length}`, `Flagged if a variant makes them significantly worse${st.settings.guardrailsBlockShip ? "; a failing guardrail blocks a “Ship now” call" : ""}.`, can(e, "editSecondary"))}
+      ${metricBox("guardrailMetrics", e.guardrailMetrics, `Guardrails · ${e.guardrailMetrics.length}`, `Fail when a variant is clearly worse by more than the metric's cutoff (${e.guardrailMetrics.map((m) => `${S.metric(m)?.name} ${fmtPct(guardCutoff(S.metric(m)), 0)}`).join(", ") || "set per metric"})${st.settings.guardrailsBlockShip ? "; a failing guardrail blocks a “Ship now” call" : ""}.`, can(e, "editSecondary"))}
       <div class="field"><label for="m-act">Activation metric</label><select id="m-act" class="inp" data-activation ${can(e, "changePrimary") ? "" : "disabled"}>${metricOptions(e.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only visitors who did this are analysed.</div></div>
       <label class="check"><input type="checkbox" data-flag="leadAttribution" ${e.leadAttribution ? "checked" : ""} ${can(e, "editText") ? "" : "disabled"}><span><span class="t1">Tag leads with experiment and variant</span><span class="t2">Adds exp_key and variant to every lead from this page, so counsellors and CRM reports can split by variant.</span></span></label>
     </section>
@@ -343,7 +343,7 @@ export function resultsBody(e, ui, { report = false } = {}) {
   if (a.multi.bad) banners.push(callout("bad", `<b>${fmtPct(a.multi.rate, 1)} of visitors saw more than one variant.</b> Usually caused by cookies being cleared or the hash attribute changing. They're kept in their first variant.`));
   if (a.noTraffic) banners.push(callout("bad", `<b>No visitors for 3 days.</b> Check that ${esc(S.page(e.pageId)?.name)} is live and the experiment script is on the page.`));
   if (!report) e.midTestEdits.forEach((m) => banners.push(callout("warn", `<b>${esc(m.variantKey)} was edited on ${fmtDateTime(m.at)}</b> (${esc(m.section)} section). Visitors before and after saw different versions of ${esc(m.variantKey)}.`)));
-  a.guardFail.forEach((g) => banners.push(callout("bad", `<b>Guardrail failing:</b> ${esc(g.v.key)} makes <b>${esc(g.metric.name)}</b> significantly worse.`)));
+  a.guardFail.forEach((g) => banners.push(callout("bad", `<b>Guardrail failing:</b> ${esc(g.v.key)} makes <b>${esc(g.metric.name)}</b> ${fmtPct(g.harm, 1)} worse, past its ${fmtPct(g.cut, 0)} cutoff.`)));
   if (a.primary?.rows.some((r) => r.suspicious)) banners.push(callout("warn", `<b>Suspiciously large change.</b> A change above ${fmtPct(a.primary.metric.maxChange ?? 0.5, 0)} on ${esc(a.primary.metric.name)} is usually a tracking problem. Check the variant before trusting it.`));
 
   const metric = a.primary?.metric;
@@ -388,9 +388,18 @@ export function resultsBody(e, ui, { report = false } = {}) {
   ${dimensionBlock(e, ui, a)}
   ${chartFor(e, ui, a)}` : callout("warn", "No primary metric is set, so there's nothing to decide on.")}
   ${a.secondary.length ? `<section class="card"><div class="toolbar"><b>Secondary metrics</b></div>${a.secondary.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
-  ${a.guardrails.length ? `<section class="card"><div class="toolbar"><b>Guardrails</b><span class="faint" style="font-size:13px">Flagged when a variant is significantly worse · not corrected for multiple tests</span></div>${a.guardrails.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
+  ${a.guardrails.length ? `<section class="card"><div class="toolbar"><b>Guardrails</b><span class="faint" style="font-size:13px">Fails when a variant is clearly worse by more than the metric's cutoff</span></div>${a.guardrails.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)} · may get up to ${fmtPct(guardCutoff(b.metric), 0)} worse</div><div class="guard-states">${b.rows.filter((r) => r.guard || (r.i !== a.baseline && !r.enough)).map((r) => guardChip(r)).join("")}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
   ${conclusion}
   ${reports.length ? `<section class="card pad"><h2>Reports</h2><div class="card-sub">Saved views of these results with fixed settings, for sharing.</div><ul class="timeline">${reports.map((r) => `<li>${avatar(r.by)}<div><a href="#/report/${r.id}"><b>${esc(r.title)}</b></a><div class="when">${fmtDate(r.createdAt)}</div></div></li>`).join("")}</ul></section>` : ""}`;
+}
+
+function guardChip(r) {
+  const g = r.guard;
+  if (!g || g.status === "pending") return `<span class="gchip pending">${esc(r.v.key)} · not enough data</span>`;
+  const worse = g.harm > 0 ? `${fmtPct(g.harm, 1)} worse` : `${fmtPct(-g.harm, 1)} better`;
+  const label = { pass: "Within cutoff", watch: "Watch", fail: "Failing" }[g.status];
+  const tip = g.status === "pass" ? `At worst ${fmtPct(Math.max(0, g.worst), 1)} worse` : g.status === "watch" ? `Could be up to ${fmtPct(g.worst, 1)} worse` : `Past the ${fmtPct(g.cut, 0)} cutoff`;
+  return `<span class="gchip ${g.status}" title="${esc(tip)}"><b>${esc(r.v.key)}</b> ${label} · ${worse}</span>`;
 }
 
 /* ---------- Health ---------- */
@@ -427,7 +436,7 @@ function health(e) {
       ${ok(!a.multi.bad, "Multiple exposures", `${fmtInt(a.multi.count)} visitors (${fmtPct(a.multi.rate, 2)}) saw more than one variant${a.multi.bad ? `, above the ${fmtPct(st.multiExposureThreshold, 0)} limit` : ""}.`)}
       ${ok(!a.noTraffic, "Traffic is flowing", a.noTraffic ? "No visitors in the last 3 days." : `${fmtInt(a.visitors)} visitors so far.`)}
       ${ok(!a.lowData, "Enough data", pm ? (a.lowData ? `Some comparisons on ${esc(pm.name)} have fewer than ${pm.minSample ?? 100} conversions. Their results stay hidden until then.` : `Every comparison on ${esc(pm.name)} has at least ${pm.minSample ?? 100} conversions.`) : "No primary metric.", true)}
-      ${ok(a.guardFail.length === 0, "Guardrails", a.guardFail.length ? a.guardFail.map((g) => `${g.v.key} worsens ${g.metric.name}`).join("; ") : e.guardrailMetrics.length ? "No guardrail is significantly worse." : "No guardrail metrics set.")}
+      ${ok(a.guardFail.length === 0 && a.guardWatch.length === 0, "Guardrails", a.guardFail.length ? a.guardFail.map((g) => `${g.v.key} makes ${g.metric.name} ${fmtPct(g.harm, 1)} worse (cutoff ${fmtPct(g.cut, 0)})`).join("; ") : a.guardWatch.length ? a.guardWatch.map((g) => `${g.v.key} could make ${g.metric.name} up to ${fmtPct(g.worst, 1)} worse (cutoff ${fmtPct(g.cut, 0)}). Keep watching.`).join("; ") : e.guardrailMetrics.length ? "Every guardrail is within its cutoff." : "No guardrail metrics set.", a.guardFail.length === 0)}
       ${ok(e.midTestEdits.length === 0, "Variants unchanged during test", e.midTestEdits.length ? `${e.midTestEdits.length} mid-test edit${e.midTestEdits.length > 1 ? "s" : ""} logged on Results.` : "No variant was edited after start.", true)}
     </ul></section>
   <section class="card"><div class="toolbar"><b>Traffic split</b><span class="faint" style="font-size:13px">Sample ratio mismatch test, flagged when p &lt; ${st.srmThreshold}</span></div>

@@ -30,6 +30,7 @@ export function renderMetric(id) {
       <dt>Conversion window</dt><dd>${m.windowHours ? `Within ${m.windowHours} hours of first exposure` : "Any time during the experiment"}</dd>
       <dt>Minimum data</dt><dd>${m.minSample ?? 100} ${m.type === "binomial" ? "conversions" : "visitors"} across baseline and variant before showing results</dd>
       <dt>Suspicious change</dt><dd>Flag changes over ${fmtPct(m.maxChange ?? 0.5, 0)}</dd>
+      <dt>Guardrail cutoff</dt><dd>As a guardrail, fails if a variant is clearly more than ${fmtPct(m.guardrailCutoff ?? 0.02, 0)} worse</dd>
       <dt>Planning lift</dt><dd>${fmtPct(m.targetMde ?? 0.1, 0)}</dd></dl></section>
     <section class="card"><div class="toolbar"><b>Experiments using it</b></div><div class="table-wrap"><table class="t compact"><thead><tr><th>Experiment</th><th>Role</th><th>Status</th></tr></thead><tbody>
       ${exps.length ? exps.map((e) => `<tr><td><a href="#/experiment/${e.id}/results">${esc(e.name)}</a></td><td>${e.primaryMetric === m.id ? "Primary" : e.guardrailMetrics.includes(m.id) ? "Guardrail" : e.activationMetric === m.id ? "Activation" : "Secondary"}</td><td>${esc(e.archived ? "archived" : e.status)}</td></tr>`).join("") : `<tr><td colspan="3" class="faint">Not used yet</td></tr>`}</tbody></table></div>
@@ -50,6 +51,7 @@ function metricModal(m) {
         <div class="grow field"><label for="mw">Conversion window (hours)</label><input id="mw" name="window" type="number" class="inp" min="0" value="${m.windowHours ?? 72}"><div class="hint">0 = any time during the test</div></div></div>
       <div class="row"><div class="grow field"><label for="ms">Minimum data before results</label><input id="ms" name="minSample" type="number" class="inp" min="0" value="${m.minSample ?? 100}"></div>
         <div class="grow field"><label for="mx">Flag changes above</label><div class="pct-input"><input id="mx" name="maxChange" type="number" class="inp" min="1" value="${Math.round((m.maxChange ?? 0.5) * 100)}"><span>%</span></div></div>
+        <div class="grow field"><label for="mg">Guardrail cutoff</label><div class="pct-input"><input id="mg" name="guardCut" type="number" class="inp" min="0" max="100" step="0.5" value="${Math.round((m.guardrailCutoff ?? 0.02) * 1000) / 10}"><span>%</span></div><div class="hint">Most it may get worse when used as a guardrail</div></div>
         <div class="grow field"><label for="mm">Planning lift</label><div class="pct-input"><input id="mm" name="mde" type="number" class="inp" min="1" value="${Math.round((m.targetMde ?? 0.1) * 100)}"><span>%</span></div></div></div>
       <label class="check"><input type="checkbox" name="lower" ${m.higherIsBetter === false ? "checked" : ""}><span><span class="t1">Lower is better</span><span class="t2">For metrics like bounce rate or load time, where a drop is good</span></span></label>`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">${isNew ? "Create metric" : "Save"}</button>`,
@@ -60,7 +62,7 @@ function metricModal(m) {
       const type = isNew ? fd.get("type") : m.type;
       const base = Number(fd.get("base"));
       const rec = { name, group: fd.get("group"), desc: String(fd.get("desc")).trim(), type, base: type === "binomial" ? Math.max(0.0001, Math.min(0.95, base / 100)) : Math.max(0.0001, base), higherIsBetter: !fd.get("lower"),
-        windowHours: Number(fd.get("window")) || 0, minSample: Number(fd.get("minSample")) || 0, maxChange: Math.max(0.01, Number(fd.get("maxChange")) / 100), targetMde: Math.max(0.01, Number(fd.get("mde")) / 100) };
+        windowHours: Number(fd.get("window")) || 0, minSample: Number(fd.get("minSample")) || 0, maxChange: Math.max(0.01, Number(fd.get("maxChange")) / 100), guardrailCutoff: Math.max(0, Number(fd.get("guardCut")) || 0) / 100, targetMde: Math.max(0.01, Number(fd.get("mde")) / 100) };
       if (isNew) S.get().metrics.push({ id: uid("m"), custom: true, tags: [], ...(type === "mean" ? { sd: rec.base * 0.4 } : {}), ...rec });
       else Object.assign(m, rec);
       S.save();

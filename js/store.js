@@ -43,8 +43,8 @@ function seed(now) {
     { id: "m_counsel", name: "Talk to counsellor click", group: "Clicks", desc: "Call and WhatsApp buttons", type: "binomial", base: 0.04 },
     { id: "m_cta", name: "CTA click", group: "Clicks", desc: "Primary call to action", type: "binomial", base: 0.09 },
     { id: "m_scroll", name: "Scroll to Fee section", group: "Engagement", desc: "Section comes into view", type: "binomial", base: 0.45 },
-    { id: "m_bounce", name: "Bounce rate", group: "Engagement", desc: "Single-page sessions", type: "binomial", base: 0.48, higherIsBetter: false },
-    { id: "m_lcp", name: "Page load (LCP, p75)", group: "Performance", desc: "From Core Web Vitals, seconds", type: "mean", base: 2.1, sd: 0.8, unit: "s", higherIsBetter: false },
+    { id: "m_bounce", name: "Bounce rate", group: "Engagement", desc: "Single-page sessions", type: "binomial", base: 0.48, higherIsBetter: false, guardrailCutoff: 0.03 },
+    { id: "m_lcp", name: "Page load (LCP, p75)", group: "Performance", desc: "From Core Web Vitals, seconds", type: "mean", base: 2.1, sd: 0.8, unit: "s", higherIsBetter: false, guardrailCutoff: 0.05 },
   ];
   metrics.forEach((m) => Object.assign(m, { windowHours: 72, minSample: 100, maxChange: 0.5, targetMde: 0.1, tags: [], ...m }));
 

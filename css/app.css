@@ -404,3 +404,9 @@ fieldset.card[disabled] { opacity: .75; }
 .reach:empty { display: none; }
 .wizard details.adv summary .opt, .key-line + * .opt { font-weight: 400; color: var(--text-3); }
 .wizard details.adv { margin-top: 4px; }
+/* Guardrail states */
+.guard-states { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 20px 0; }
+.gchip { display: inline-flex; gap: 4px; align-items: center; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--seg); color: var(--gray-fg); }
+.gchip.pass { background: var(--green-bg); border-color: #BBF7D0; color: var(--green-fg); }
+.gchip.watch { background: var(--amber-bg); border-color: #FDE68A; color: var(--amber-fg); }
+.gchip.fail { background: var(--red-bg); border-color: #FECACA; color: var(--red-fg); }
