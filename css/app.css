@@ -387,3 +387,7 @@ fieldset.card[disabled] { opacity: .75; }
 .plan-mde { display: flex; align-items: center; gap: 8px; }
 .plan-mde label { font-size: 13px; color: var(--text-3); white-space: nowrap; margin: 0; }
 .plan-mde select { width: 96px; height: 38px; }
+/* Split URL rows */
+.url-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 110px 34px; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--row); }
+.url-inputs { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
+@media (max-width: 700px) { .url-row { grid-template-columns: 26px minmax(0, 1fr) 90px; } .url-inputs { grid-template-columns: 1fr; } .url-row > :last-child:not(.pct-input) { grid-column: 2; justify-self: start; } }

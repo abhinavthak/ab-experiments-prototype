@@ -61,7 +61,7 @@ function header(e, tab) {
   return `
   <div class="crumbs"><a href="#/experiments">Experiments</a> / <a href="#/page/${p?.id}">${esc(p?.name || "Deleted page")}</a></div>
   <div class="page-head" style="margin-bottom:12px">
-    <div style="min-width:0"><div class="row" style="gap:12px"><h1 style="font-size:28px">${esc(e.name)}</h1>${pill(st.tone, st.label)}${e.type === "bandit" ? `<span class="badge blue">Bandit</span>` : ""}${e.watched ? `<span class="badge amber">★ Watching</span>` : ""}</div>
+    <div style="min-width:0"><div class="row" style="gap:12px"><h1 style="font-size:28px">${esc(e.name)}</h1>${pill(st.tone, st.label)}${S.isUrlTest(e) ? `<span class="badge">Split URL</span>` : ""}${e.type === "bandit" ? `<span class="badge blue">Bandit</span>` : ""}${e.watched ? `<span class="badge amber">★ Watching</span>` : ""}</div>
       <div class="sub" style="font-size:14px">${esc(sub)} · tracking key <button type="button" class="link-btn mono" data-act="exp-copykey" title="Copy">${esc(e.trackingKey)}</button> · ${avatar(e.ownerId)} ${esc(S.user(e.ownerId).name)}</div></div>
     <div class="head-actions">${btns.join("")}${menu("⋯", items, { label: "More actions" })}</div>
   </div>
@@ -87,7 +87,12 @@ function overview(e) {
   const isBandit = e.type === "bandit";
   const banditW = isBandit && phases.length ? analyze(e).bandit?.weights : null;
 
-  const variantRows = vs
+  const isUrl = S.isUrlTest(e);
+  const variantRows = isUrl
+    ? vs.map((v, i) => `<div class="var-row">${variantChip(v)}<div style="min-width:0"><b>${esc(v.name)}</b>${i === 0 ? ` <span class="badge">Control</span>` : ""}<div class="small mono" style="margin-top:2px;overflow-wrap:anywhere">${esc(v.url)}</div></div>
+      ${isBandit ? `<div class="num" style="font-size:14px">${banditW ? `<b>${fmtPct(banditW[i], 0)}</b><div class="small" style="margin:0">today</div>` : `<span class="faint">auto</span>`}</div>` : `<div class="pct-input"><input class="inp" type="number" min="0" max="100" step="1" data-weight="${i}" value="${esc(e.weights[i])}" aria-label="Traffic split for ${esc(v.key)}" ${edV ? "" : "disabled"}><span>%</span></div>`}
+      <div class="row" style="gap:6px;justify-content:flex-end"><button type="button" class="btn xs" data-act="exp-preview" data-vid="${v.id}">Open</button></div></div>`).join("")
+    : vs
     .map((v, i) => `<div class="var-row">${variantChip(v)}<div style="min-width:0"><b>${esc(v.name)}</b>${i === 0 ? ` <span class="badge">Control</span>` : ""}<div class="small" style="margin-top:2px">${i === 0 ? `Default variant · ${p?.sections ?? 0} sections` : `${v.changes} change${v.changes === 1 ? "" : "s"} vs default`}</div></div>
       ${isBandit ? `<div class="num" style="font-size:14px">${banditW ? `<b>${fmtPct(banditW[i], 0)}</b><div class="small" style="margin:0">today</div>` : `<span class="faint">auto</span>`}</div>` : `<div class="pct-input"><input class="inp" type="number" min="0" max="100" step="1" data-weight="${i}" value="${esc(e.weights[i])}" aria-label="Traffic split for ${esc(v.key)}" ${edV ? "" : "disabled"}><span>%</span></div>`}
       <div class="row" style="gap:6px;justify-content:flex-end">${i > 0 && edV ? `<button type="button" class="btn xs" data-act="exp-remove-variant" data-vid="${v.id}" aria-label="Remove ${esc(v.key)} from test">Remove</button>` : ""}<a class="btn xs" href="#/page/${e.pageId}?v=${v.id}">${i === 0 ? "View" : "Edit sections"}</a></div></div>`)
@@ -116,12 +121,12 @@ function overview(e) {
     </section>
 
     <section class="card pad">
-      <div class="card-head"><div><h2>${isBandit ? "Arms" : "Variants &amp; split"}</h2><div class="card-sub">${isBandit ? "A bandit starts with an even split and re-weights daily toward the best arm on the decision metric (never below 2%)." : "Variants are created in the page editor. Control is the page's default variant."}</div></div>${runningLock}</div>
+      <div class="card-head"><div><h2>${isUrl ? "URLs &amp; split" : isBandit ? "Arms" : "Variants &amp; split"}</h2><div class="card-sub">${isBandit ? "A bandit starts with an even split and re-weights daily toward the best arm on the decision metric (never below 2%)." : isUrl ? "Split URL test: A is the original page; visitors assigned to the other URLs are redirected." : "Variants are created in the page editor. Control is the page's default variant."}</div></div>${runningLock}</div>
       ${variantRows}
       <div class="row" style="justify-content:space-between;margin-top:12px">
-        <div class="row" style="gap:8px">${edV && !isBandit ? `<button type="button" class="btn xs" data-act="exp-split-even">Split evenly</button>` : ""}${edV && notIn.length ? menu(`${icon.plus(16)} Add page variant`, notIn.map((v) => menuItem("exp-add-variant", `${v.key} · ${v.name}`, { data: `data-vid="${v.id}"` })).join(""), { cls: "btn xs", label: "Add page variant" }) : ""}${edV && p ? `<a class="btn xs" href="#/page/${p.id}?new=1">New variant in page editor</a>` : ""}</div>
+        <div class="row" style="gap:8px">${edV && !isBandit ? `<button type="button" class="btn xs" data-act="exp-split-even">Split evenly</button>` : ""}${edV && notIn.length && !isUrl ? menu(`${icon.plus(16)} Add page variant`, notIn.map((v) => menuItem("exp-add-variant", `${v.key} · ${v.name}`, { data: `data-vid="${v.id}"` })).join(""), { cls: "btn xs", label: "Add page variant" }) : ""}${edV && p ? `<a class="btn xs" href="#/page/${p.id}?new=1">New variant in page editor</a>` : ""}</div>
         ${isBandit ? "" : `<b class="${Math.round(total) === 100 ? "" : "down"}">Total ${Math.round(total)}%</b>`}</div>
-      <div class="field" style="margin-top:16px;margin-bottom:0"><span class="label">How variants are served</span><div class="muted" style="font-size:14px">Same URL — the CMS swaps sections. Visitors stay on <span class="mono">${esc(p?.path || "")}</span>. Variants keep Control's canonical tag and aren't indexed separately, so SEO is unaffected.</div></div>
+      <div class="field" style="margin-top:16px;margin-bottom:0"><span class="label">How variants are served</span><div class="muted" style="font-size:14px">${isUrl ? `Split URL. Everyone lands on <span class="mono">${esc(p?.path || "")}</span>; visitors in ${vs.slice(1).map((v) => esc(v.key)).join(", ")} get a temporary (302) redirect that keeps UTM parameters. Variant pages point their canonical tag at the original, so SEO is unaffected.` : `Same URL — the CMS swaps sections. Visitors stay on <span class="mono">${esc(p?.path || "")}</span>. Variants keep Control's canonical tag and aren't indexed separately, so SEO is unaffected.`}</div></div>
     </section>
 
     <section class="card pad">
@@ -617,6 +622,11 @@ Object.assign(acts, {
   "exp-preview": (el) => {
     const e = expOf(el);
     const p = S.page(e.pageId);
+    if (S.isUrlTest(e)) {
+      const v = S.variantsOf(e).find((x) => x.id === el.dataset.vid);
+      const url = /^https?:/.test(v?.url || "") ? v.url : `https://example.edu${v?.url || ""}`;
+      return copyText(`${url}${url.includes("?") ? "&" : "?"}exp-preview=${e.trackingKey}:${v?.key}`);
+    }
     const v = p?.variants.find((x) => x.id === el.dataset.vid);
     copyText(`https://example.edu${p?.path}?exp-preview=${e.trackingKey}:${v?.key}`);
   },

@@ -200,7 +200,7 @@ export function render() {
         return `<tr data-id="${e.id}">
           <td><button type="button" class="star ${e.watched ? "on" : ""}" data-act="exp-watch" aria-pressed="${e.watched}" aria-label="${e.watched ? "Stop watching" : "Watch"} ${esc(e.name)}">${e.watched ? "★" : "☆"}</button></td>
           <td><a class="exp-name" href="#/experiment/${e.id}/${e.status === "draft" || e.status === "scheduled" ? "overview" : "results"}">${esc(e.name)}</a>
-            <div class="meta">${e.type === "bandit" ? `<span class="badge blue">Bandit</span>` : ""}${e.imported ? `<span class="badge">Imported</span>` : ""}<span>${esc(p?.name || "Deleted page")}</span><span aria-hidden="true">·</span><span class="mono">${esc(e.trackingKey)}</span>${e.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join("")}</div>
+            <div class="meta">${e.type === "bandit" ? `<span class="badge blue">Bandit</span>` : ""}${S.isUrlTest(e) ? `<span class="badge">Split URL</span>` : ""}${e.imported ? `<span class="badge">Imported</span>` : ""}<span>${esc(p?.name || "Deleted page")}</span><span aria-hidden="true">·</span><span class="mono">${esc(e.trackingKey)}</span>${e.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join("")}</div>
             <div class="chips"><span class="chip-row">${vs.map((v) => variantChip(v)).join("")}</span><span aria-hidden="true" style="color:var(--border)">|</span>${avatar(e.ownerId)}</div></td>
           <td>${pm ? `<b style="font-weight:500;font-size:14px">${esc(pm.name)}</b>${extra ? ` <span class="faint">+${extra}</span>` : ""}` : `<span class="faint">None</span>`}</td>
           <td>${statusCell(e)}</td>

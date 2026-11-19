@@ -171,20 +171,22 @@ export function stopExperiment(e, { preset = null } = {}) {
     ["inconclusive", "No clear winner", "Differences too small to call"],
     ["dnf", "Did not finish", "Stopped early, for example because of a bug"],
   ];
+  const isUrl = S.isUrlTest(e);
+  const defId = isUrl ? vs[0].id : p.defaultVariantId;
   const sel = preset?.result || "won";
   const winner = preset?.winner || vs[1]?.id;
   openModal({
     title: recording ? "Record a result" : "Stop experiment",
     wide: true,
-    body: `${recording ? callout("warn", `Stopped automatically on ${esc(fmtDate(e.endedAt))}. Visitors see ${esc(vs.find((v) => v.id === p.defaultVariantId)?.key || "A")} (default) again. Record a result to finish.`) : ""}
+    body: `${recording ? callout("warn", `Stopped automatically on ${esc(fmtDate(e.endedAt))}. Visitors see ${esc(vs.find((v) => v.id === defId)?.key || "A")} again. Record a result to finish.`) : ""}
       <div class="label">Result</div>
       <div class="stack-sm" role="radiogroup">${results
         .map(([k, t, d]) => `<label class="check ${k === sel ? "on" : ""}"><input type="radio" name="result" value="${k}" ${k === sel ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${d}</span></span></label>`)
         .join("")}</div>
       <div class="field" id="winner-field" style="margin-top:16px"><label for="st-winner">Winning variant</label>
         <select id="st-winner" name="winner" class="inp">${vs.slice(1).map((v) => `<option value="${v.id}" ${v.id === winner ? "selected" : ""}>${esc(v.key)} · ${esc(v.name)}</option>`).join("")}</select></div>
-      <div class="field" ${e.imported ? "hidden" : ""}><label for="st-default">Page default after stopping</label>
-        <select id="st-default" name="released" class="inp">${vs.map((v) => `<option value="${v.id}">${esc(v.key)} · ${esc(v.name)}${v.id === p.defaultVariantId ? " (current default)" : ""}</option>`).join("")}</select>
+      <div class="field" ${e.imported ? "hidden" : ""}><label for="st-default">${isUrl ? "Where visitors go after stopping" : "Page default after stopping"}</label>
+        <select id="st-default" name="released" class="inp">${vs.map((v) => `<option value="${v.id}">${esc(v.key)} · ${esc(v.name)}${isUrl ? ` (${esc(v.url)})` : v.id === p.defaultVariantId ? " (current default)" : ""}</option>`).join("")}</select>
         <div class="hint" id="st-hint"></div></div>
       <div class="field"><label for="st-sum">Conclusion <span class="opt">· what you learned, shown on Results and in Insights</span></label><textarea id="st-sum" name="summary" class="inp" placeholder="What happened, why you think so, and what to try next">${esc(e.analysisSummary || "")}</textarea></div>
       ${callout("info", "A stopped test can't restart. Duplicate it to run again. Results stay readable.")}`,
@@ -198,7 +200,9 @@ export function stopExperiment(e, { preset = null } = {}) {
           form.released.value = r === "won" ? form.winner.value : vs[0].id;
         }
         const rel = vs.find((v) => v.id === form.released.value);
-        form.querySelector("#st-hint").textContent = `All visitors see ${rel.key} right away${rel.id !== p.defaultVariantId ? `, and ${rel.key} becomes the page's default` : ""}.`;
+        form.querySelector("#st-hint").textContent = isUrl
+          ? rel.id === defId ? `The redirect is removed. Everyone stays on ${rel.url}.` : `Everyone landing on ${vs[0].url} is redirected to ${rel.url} (301). Update links and ads to point there.`
+          : `All visitors see ${rel.key} right away${rel.id !== p.defaultVariantId ? `, and ${rel.key} becomes the page's default` : ""}.`;
       };
       form.addEventListener("change", upd);
       upd();
@@ -215,12 +219,13 @@ export function stopExperiment(e, { preset = null } = {}) {
       e.winnerVariantId = result === "won" ? fd.get("winner") : null;
       e.releasedVariantId = fd.get("released");
       // Imported tests ran in the past, so recording them doesn't change the page.
-      if (!e.imported) applyPageDefault(p, e.releasedVariantId, e.id);
+      if (!e.imported && !isUrl) applyPageDefault(p, e.releasedVariantId, e.id);
       const rel = vs.find((v) => v.id === e.releasedVariantId);
-      S.log(e, `${recording ? "Recorded" : "Stopped the experiment and recorded"} “${RESULT_LABEL[result]}”; ${rel.key} is the page default`);
+      const outcome = isUrl ? (rel.id === defId ? "redirect removed" : `${vs[0].url} now redirects to ${rel.url}`) : `${rel.key} is the page default`;
+      S.log(e, `${recording ? "Recorded" : "Stopped the experiment and recorded"} “${RESULT_LABEL[result]}”; ${outcome}`);
       S.save();
       closeModal();
-      toast(e.imported ? "Result recorded" : `${rel.key} is now the default for ${p.name}`, "good");
+      toast(e.imported ? "Result recorded" : isUrl ? (rel.id === defId ? "Stopped. Everyone sees the original page." : `Stopped. ${vs[0].url} now redirects to ${rel.url}`) : `${rel.key} is now the default for ${p.name}`, "good");
     },
   });
 }
@@ -274,13 +279,14 @@ export function duplicateExperiment(e) {
   if (!S.canEdit()) return toast("You need Editor access", "bad");
   const p = S.page(e.pageId);
   const d = S.newExperimentDraft();
-  const control = p?.defaultVariantId ?? e.variantIds[0];
-  const ids = [control, ...e.variantIds.filter((id) => id !== control && p?.variants.some((v) => v.id === id))];
+  const isUrl = S.isUrlTest(e);
+  const control = isUrl ? e.variantIds[0] : p?.defaultVariantId ?? e.variantIds[0];
+  const ids = isUrl ? [...e.variantIds] : [control, ...e.variantIds.filter((id) => id !== control && p?.variants.some((v) => v.id === id))];
   const even = Math.floor(100 / ids.length);
   Object.assign(d, {
     name: `${e.name} (copy)`,
     trackingKey: S.uniqueKey(e.trackingKey.replace(/-\d+$/, "")),
-    pageId: e.pageId, variantIds: ids, weights: ids.map((_, i) => (i === 0 ? 100 - even * (ids.length - 1) : even)),
+    pageId: e.pageId, testKind: isUrl ? "url" : "variants", urlVariants: isUrl ? structuredClone(e.urlVariants) : null, variantIds: ids, weights: ids.map((_, i) => (i === 0 ? 100 - even * (ids.length - 1) : even)),
     hypothesis: e.hypothesis, description: e.description, tags: [...e.tags], coverage: e.coverage, targeting: { ...e.targeting },
     primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics],
     statsEngine: e.statsEngine, sequential: e.sequential, cuped: e.cuped, stopAfterDays: e.stopAfterDays, leadAttribution: e.leadAttribution,

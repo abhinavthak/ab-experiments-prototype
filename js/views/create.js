@@ -2,8 +2,8 @@
 //   Overview → Page & variants → Targeting → Metrics → Analysis → Review.
 // Also: "Analyze a past experiment" (import), and the power estimate.
 import * as S from "../store.js";
-import { openModal, closeModal, icon, variantChip, callout, tagPicker } from "../ui.js";
-import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS } from "../util.js";
+import { openModal, closeModal, icon, variantChip, chip, callout, tagPicker } from "../ui.js";
+import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS, uid } from "../util.js";
 import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
 import { targetingFactor, totals as simTotals } from "../sim.js";
@@ -130,13 +130,40 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   d.type = type;
   const pages = [...st.pages].sort((a, b) => (eligibility(a) ? 1 : 0) - (eligibility(b) ? 1 : 0));
   const firstOk = (prefPageId && S.page(prefPageId) && prefPageId) || pages.find((p) => !eligibility(p))?.id || null;
+  const evenWeights = (n) => Array.from({ length: n }, (_, i) => (i === 0 ? 100 - Math.floor(100 / n) * (n - 1) : Math.floor(100 / n)));
+  const KEYS = "ABCDE";
+  // Split URL: A is the chosen page's own URL; B.. are URLs visitors get redirected to.
+  const urlRows = () => d.urlVariants || [];
+  const syncUrl = () => {
+    const p = S.page(d.pageId);
+    if (!d.urlVariants?.length) d.urlVariants = [{ id: uid("uv"), key: "A", name: "Original", url: "", changes: 0 }, { id: uid("uv"), key: "B", name: "", url: "", changes: 1 }];
+    d.urlVariants[0] = { ...d.urlVariants[0], name: "Original", url: p?.path || "" };
+    d.urlVariants.forEach((v, i) => (v.key = KEYS[i]));
+    d.variantIds = d.urlVariants.map((v) => v.id);
+    if (d.weights.length !== d.variantIds.length) d.weights = evenWeights(d.variantIds.length);
+  };
   const setPage = (pid) => {
     const p = S.page(pid);
     d.pageId = pid;
     if (!p) return;
+    if (d.testKind === "url") return syncUrl();
     d.variantIds = [p.defaultVariantId, ...p.variants.filter((v) => v.id !== p.defaultVariantId).map((v) => v.id)];
-    const even = Math.floor(100 / d.variantIds.length);
-    d.weights = d.variantIds.map((_, i) => (i === 0 ? 100 - even * (d.variantIds.length - 1) : even));
+    d.weights = evenWeights(d.variantIds.length);
+  };
+  const urlStep = () => {
+    const rows = urlRows();
+    const bandit = d.type === "bandit";
+    const weight = (v, i) => (bandit ? `<span class="faint" style="font-size:13px">auto</span>` : `<div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${d.weights[i] ?? 0}" aria-label="Split for ${v.key}"><span>%</span></div>`);
+    const paths = st.pages.filter((x) => x.id !== d.pageId).map((x) => `<option value="${esc(x.path)}">${esc(x.name)}</option>`).join("");
+    const last = rows[rows.length - 1]?.key;
+    return `<div class="field"><span class="label">URLs ${bandit ? "· arms" : "&amp; split"}</span>
+      <datalist id="cms-paths">${paths}</datalist>
+      ${rows.map((v, i) => i === 0
+        ? `<div class="url-row">${chip(0)}<div class="url-main"><b>Original</b> <span class="badge">Control</span><div class="small mono" style="margin:2px 0 0">${esc(v.url)}</div></div>${weight(v, i)}<span></span></div>`
+        : `<div class="url-row">${chip(i)}<div class="url-main url-inputs"><input class="inp mono" name="uurl-${i}" list="cms-paths" value="${esc(v.url)}" placeholder="/new-landing-page or https://…" aria-label="URL for ${v.key}" autocomplete="off"><input class="inp" name="uname-${i}" value="${esc(v.name)}" placeholder="Name, e.g. Redesigned page" aria-label="Name for ${v.key}"></div>${weight(v, i)}${rows.length > 2 ? `<button type="button" class="btn xs ghost" data-local="u-del" data-i="${i}" aria-label="Remove ${v.key}">${icon.x(16)}</button>` : "<span></span>"}</div><div data-err="uurl-${i}"></div>`).join("")}
+      <div class="row" style="justify-content:space-between;margin-top:10px"><div class="row" style="gap:8px">${rows.length < 5 ? `<button type="button" class="btn xs" data-local="u-add">${icon.plus(14)} Add URL</button>` : ""}${bandit ? "" : `<button type="button" class="btn xs" data-local="even">Split evenly</button>`}</div>${bandit ? `<span class="hint" style="margin:0">Starts even, then re-weights daily toward the best URL.</span>` : `<b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b>`}</div>
+      <div data-err="split"></div>
+      <div class="hint">Choose another CMS page from the list or paste any URL. Visitors assigned to ${rows.length > 2 ? `B–${last}` : "B"} get a temporary (302) redirect and keep their UTM parameters. Each URL needs the lead form so conversions are counted.</div></div>`;
   };
   setPage(firstOk);
   let step = 0;
@@ -159,19 +186,33 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     variants: () => {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
-      return `<div class="field"><label for="c-page">Page to test</label>
-        <select id="c-page" name="page" class="inp"><option value="">Choose a page</option>${pages.map((x) => {
-          const why = eligibility(x);
-          return `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""}>${esc(x.name)} — ${why ? why.toLowerCase() : `${x.variants.length} variants`}</option>`;
-        }).join("")}</select>
-        ${p ? `<div class="hint mono">${esc(p.path)}</div>` : `<div class="hint">Variants are served on the same URL; the CMS swaps sections.</div>`}<div data-err="page"></div></div>
-      ${(() => {
+      const isUrl = d.testKind === "url";
+      const kindCards = `<div class="field"><span class="label">What are you comparing?</span><div class="type-cards" role="radiogroup" aria-label="What are you comparing">
+        ${[["variants", "Original vs variant", "Same URL. The CMS swaps sections of this page using the variants you built in the page editor."], ["url", "URL vs URL", "Split URL. Some visitors are redirected to a different page, e.g. a redesigned landing page."]]
+          .map(([k, t, sub]) => `<label class="check ${d.testKind === k ? "on" : ""}"><input type="radio" name="kind" value="${k}" ${d.testKind === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
+      const pageWhy = (x) => {
+        if (isUrl) {
+          const a = S.activeExpOnPage(x.id, d.id);
+          return a ? `${a.status} experiment` : x.status !== "live" ? "draft page" : x.path;
+        }
+        const why = eligibility(x);
+        return why ? why.toLowerCase() : `${x.variants.length} variants`;
+      };
+      const pageField = `<div class="field"><label for="c-page">${isUrl ? "Original page · A (Control)" : "Page to test"}</label>
+        <select id="c-page" name="page" class="inp"><option value="">Choose a page</option>${pages.map((x) => `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""}>${esc(x.name)} — ${esc(pageWhy(x))}</option>`).join("")}</select>`;
+      const conflict = (() => {
         if (!p) return "";
         const other = S.activeExpOnPage(p.id, d.id);
         if (other) return callout("warn", `“${esc(other.name)}” is ${other.status} on this page. You can set this up now as a draft and start it once that one ends.`);
         if (p.status !== "live") return callout("warn", `${esc(p.name)} is a draft page. You can set this up now; publish the page before starting.`);
         return "";
-      })()}
+      })();
+      if (isUrl) return `${kindCards}${pageField}
+        ${p ? `<div class="hint">Visitors land on <span class="mono">${esc(p.path)}</span>. A stays there; the others are redirected.</div>` : ""}<div data-err="page"></div></div>
+        ${conflict}${p ? urlStep() : ""}`;
+      return `${kindCards}${pageField}
+        ${p ? `<div class="hint mono">${esc(p.path)}</div>` : `<div class="hint">Variants are served on the same URL; the CMS swaps sections.</div>`}<div data-err="page"></div></div>
+      ${conflict}
       ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants ${d.type === "bandit" ? "· arms" : "& split"}</span>
         ${p.variants.map((v) => {
           const i = d.variantIds.indexOf(v.id);
@@ -248,9 +289,9 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
             ${kv("Owner", esc(owner))}
             ${kv("Tags", d.tags.length ? d.tags.map((x) => `<span class="badge">${esc(x)}</span>`).join(" ") : none())}`)}
 
-          ${sec("Page &amp; variants", 1, `<div class="rv-page">${esc(p?.name || "")} <span class="mono faint">${esc(p?.path || "")}</span></div>
+          ${sec(d.testKind === "url" ? "URLs" : "Page &amp; variants", 1, `<div class="rv-page">${esc(p?.name || "")} <span class="mono faint">${esc(p?.path || "")}</span>${d.testKind === "url" ? `<div class="faint small" style="margin:2px 0 0">Split URL · B${vs.length > 2 ? `–${vs[vs.length - 1].key}` : ""} redirect from here</div>` : ""}</div>
             ${d.type === "bandit" ? "" : `<div class="rv-split" aria-hidden="true">${vs.map((v, i) => `<span style="flex:${Number(d.weights[i]) || 0};background:${color(v)}"></span>`).join("")}</div>`}
-            <ul class="rv-vars">${vs.map((v, i) => `<li>${variantChip(v, true)}<span class="grow">${esc(v.name)}${i === 0 ? ` <span class="faint">· control</span>` : ""}</span><b>${d.type === "bandit" ? "auto" : `${d.weights[i]}%`}</b></li>`).join("")}</ul>
+            <ul class="rv-vars">${vs.map((v, i) => `<li>${variantChip(v, true)}<span class="grow">${esc(v.name)}${i === 0 ? ` <span class="faint">· control</span>` : ""}${d.testKind === "url" ? `<span class="mono faint" style="display:block;font-size:12.5px;overflow-wrap:anywhere">${esc(v.url)}</span>` : ""}</span><b>${d.type === "bandit" ? "auto" : `${d.weights[i]}%`}</b></li>`).join("")}</ul>
             ${d.type === "bandit" ? `<div class="hint">Traffic shifts daily toward the best variant.</div>` : ""}`)}
 
           ${sec("Targeting", 2, `${kv("Who", who.length ? who.map(esc).join("<br>") : "All visitors")}
@@ -306,8 +347,28 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       st.customFields.filter((f) => f.required).forEach((f) => !d.customFields[f.id] && (errs[`cf-${f.id}`] = `Enter ${f.name}`));
     } else if (k === "variants") {
       const p = S.page(d.pageId);
+      d.testKind = fd.get("kind") || d.testKind;
       if (!p) errs.page = "Choose a page";
-      else if (p.variants.length < 2) errs.page = "This page has only its default variant. Add a variant in the page editor first.";
+      else if (d.testKind === "url") {
+        syncUrl();
+        const rows = d.urlVariants;
+        const norm = (u) => u.replace(/^https?:\/\/[^/]+/, "").replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+        rows.forEach((v, i) => {
+          if (i === 0) return;
+          if (fd.has(`uurl-${i}`)) v.url = String(fd.get(`uurl-${i}`)).trim();
+          if (fd.has(`uname-${i}`)) v.name = String(fd.get(`uname-${i}`)).trim();
+          if (!v.name && v.url) v.name = st.pages.find((x) => x.path === v.url)?.name || "";
+          if (!v.url) errs[`uurl-${i}`] = "Enter a URL";
+          else if (!/^(\/|https?:\/\/)/.test(v.url)) errs[`uurl-${i}`] = "Start with / for a page on this site, or https:// for another site";
+          else if (norm(v.url) === norm(rows[0].url)) errs[`uurl-${i}`] = "That's the original page's URL. Variants need a different URL.";
+          else if (rows.slice(1, i).some((x) => norm(x.url) === norm(v.url))) errs[`uurl-${i}`] = "Same URL as another variant";
+        });
+        rows.forEach((v, i) => { if (i > 0 && !v.name) v.name = `URL ${v.key}`; });
+        d.weights = d.type === "bandit" ? evenWeights(rows.length) : rows.map((v) => Number(fd.get(`w-${v.id}`)) || 0);
+        const sum = Math.round(d.weights.reduce((a, b) => a + b, 0));
+        if (d.type !== "bandit" && sum !== 100) errs.split = `The split adds up to ${sum}%, not 100%`;
+        else if (d.type !== "bandit" && d.weights.some((w) => w <= 0)) errs.split = "Every URL needs some traffic";
+      } else if (p.variants.length < 2) errs.page = "This page has only its default variant. Add a variant in the page editor first.";
       else {
         const picked = fd.getAll("variant");
         const ids = [p.defaultVariantId, ...p.variants.filter((v) => picked.includes(v.id)).map((v) => v.id)];
@@ -386,6 +447,32 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       form.key.addEventListener("input", () => (keyTouched = true));
     }
     if (k === "variants") {
+      form.querySelectorAll("input[name=kind]").forEach((r) => r.addEventListener("change", () => {
+        d.testKind = r.value;
+        d.weights = [];
+        if (r.value === "url") syncUrl();
+        else setPage(d.pageId);
+        paint();
+      }));
+      form.querySelector("[data-local=u-add]")?.addEventListener("click", () => {
+        collect(form);
+        d.urlVariants.push({ id: uid("uv"), key: "", name: "", url: "", changes: 1 });
+        d.weights = [];
+        syncUrl();
+        paint();
+      });
+      form.querySelectorAll("[data-local=u-del]").forEach((b) => b.addEventListener("click", () => {
+        collect(form);
+        d.urlVariants.splice(Number(b.dataset.i), 1);
+        d.weights = [];
+        syncUrl();
+        paint();
+      }));
+      form.querySelectorAll("input[name^=uurl-]").forEach((inp) => inp.addEventListener("change", () => {
+        const nm = form.querySelector(`[name="uname-${inp.name.split("-")[1]}"]`);
+        const pg = st.pages.find((x) => x.path === inp.value.trim());
+        if (nm && !nm.value.trim() && pg) nm.value = pg.name;
+      }));
       form.page?.addEventListener("change", () => {
         setPage(form.page.value || null);
         paint();

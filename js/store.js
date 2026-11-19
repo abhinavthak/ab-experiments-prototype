@@ -153,6 +153,7 @@ export function load() {
   }
   if (!state || state.v !== 2) state = seed(Date.now());
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
+  addUrlSample();
   // The sample "Ticket" custom field was removed; drop it from data saved before that.
   state.customFields = (state.customFields || []).filter((f) => f.id !== "cf_ticket");
   // The free-text "Traffic source" targeting field was removed; UTM rules live in attribute conditions.
@@ -162,6 +163,25 @@ export function load() {
   (state.experiments || []).forEach((e) => { if (e.targeting) { delete e.targeting.source; delete e.targeting.savedGroups; } e.namespace = null; });
   reconcile();
   return state;
+}
+
+// Sample split-URL draft, added once (also for data saved before split URL tests existed).
+function addUrlSample() {
+  if (state.urlSampleAdded) return;
+  state.urlSampleAdded = true;
+  const p = page("pg_bba");
+  if (!p) return;
+  const e = newExperimentDraft();
+  const ua = { id: "uv_bba_a", key: "A", name: "Original", url: p.path, changes: 0 };
+  const ub = { id: "uv_bba_b", key: "B", name: "Redesigned landing page", url: `${p.path.replace(/\/$/, "")}-new`, changes: 1 };
+  Object.assign(e, {
+    id: "e_url", name: "Online BBA — redesigned landing page", trackingKey: "online-bba-landing-redesign", pageId: p.id,
+    testKind: "url", urlVariants: [ua, ub], variantIds: [ua.id, ub.id], weights: [50, 50], ownerId: "u_at",
+    hypothesis: "A shorter page with fees and the enquiry form above the fold will get more enquiries than the current long page.",
+    tags: ["landing-page"], primaryMetric: "m_lead", guardrailMetrics: ["m_bounce"], stopAfterDays: 28, createdAt: now() - 2 * 86400000, updatedAt: now() - 2 * 86400000,
+  });
+  e.history = [{ at: e.createdAt, by: "u_at", text: "Created the experiment" }];
+  state.experiments.push(e);
 }
 
 export function save() {
@@ -209,8 +229,10 @@ export function closePhase(e, end) {
   if (last && !last.end) last.end = end;
 }
 
+export const isUrlTest = (e) => e?.testKind === "url" && Array.isArray(e.urlVariants);
 export function variantsOf(e) {
   if (e.virtualVariants) return e.virtualVariants;
+  if (isUrlTest(e)) return e.urlVariants;
   const p = page(e.pageId);
   return e.variantIds.map((id) => p?.variants.find((x) => x.id === id) || { id, key: "?", name: "Deleted variant", changes: 0 });
 }
@@ -297,7 +319,7 @@ export function reconcile() {
       e.endedAt = sd;
       closePhase(e, sd);
       e.stoppedAutomatically = true;
-      e.releasedVariantId = page(e.pageId)?.defaultVariantId ?? null;
+      e.releasedVariantId = isUrlTest(e) ? e.variantIds[0] : page(e.pageId)?.defaultVariantId ?? null;
       e.history.push({ at: sd, by: "system", text: "Stopped automatically on its stop date" });
       e.updatedAt = t;
       changed = true;
@@ -308,7 +330,7 @@ export function reconcile() {
 
 export function newExperimentDraft() {
   return {
-    id: uid("e"), name: "", trackingKey: "", pageId: null, variantIds: [], weights: [], hypothesis: "", description: "", tags: [], ownerId: state.currentUserId,
+    id: uid("e"), name: "", trackingKey: "", pageId: null, testKind: "variants", urlVariants: null, variantIds: [], weights: [], hypothesis: "", description: "", tags: [], ownerId: state.currentUserId,
     watched: true, coverage: 100, targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [] }, primaryMetric: null,
     assignment: { hashAttribute: state.settings.hashAttribute, fallback: "", sticky: state.settings.stickyDefault }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
