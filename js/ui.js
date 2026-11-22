@@ -270,3 +270,25 @@ document.addEventListener("keydown", (ev) => {
   }
 });
 }
+
+// ⓘ info button: toggles a short explanation under the label it sits in.
+export function infoTip(title, bullets) {
+  const body = Array.isArray(bullets) ? `<ul>${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>` : `<p>${bullets}</p>`;
+  return `<span class="info-wrap"><button type="button" class="info-btn" aria-expanded="false" aria-label="About ${esc(title)}" data-info>i</button><span class="info-pop" role="note" hidden><b>${esc(title)}</b>${body}</span></span>`;
+}
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-info]");
+    document.querySelectorAll(".info-pop:not([hidden])").forEach((p) => {
+      if (!btn || p !== btn.nextElementSibling) {
+        p.hidden = true;
+        p.previousElementSibling?.setAttribute("aria-expanded", "false");
+      }
+    });
+    if (!btn) return;
+    ev.preventDefault();
+    const pop = btn.nextElementSibling;
+    pop.hidden = !pop.hidden;
+    btn.setAttribute("aria-expanded", String(!pop.hidden));
+  });
+}

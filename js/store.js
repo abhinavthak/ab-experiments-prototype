@@ -237,6 +237,12 @@ export function variantsOf(e) {
   return e.variantIds.map((id) => p?.variants.find((x) => x.id === id) || { id, key: "?", name: "Deleted variant", changes: 0 });
 }
 
+// Owner notifications (in the prototype: recorded in History).
+export function notifyOwner(e, what) {
+  const u = USERS.find((x) => x.id === e.ownerId);
+  e.history.push({ at: now(), by: "system", text: `Notified ${u ? u.name : "the owner"}: ${what}` });
+}
+
 export function log(e, text) {
   e.history.push({ at: now(), by: state.currentUserId, text });
   e.updatedAt = now();
@@ -266,6 +272,16 @@ export function startChecks(e) {
     { ok: e.coverage > 0, label: "Rollout is above 0%" },
     { ok: !other, label: "No other running or scheduled experiment on this page", fix: other ? `“${other.name}” is ${other.status}` : "" },
   ];
+  // Tracking: built into CMS pages; can't be confirmed on pages outside the CMS.
+  const external = isUrlTest(e) ? e.urlVariants.slice(1).filter((v) => /^https?:/.test(v.url)) : [];
+  items.push(external.length
+    ? { ok: true, warn: true, label: `Tracking can't be confirmed on ${external.map((v) => v.key).join(", ")} (outside the CMS)`, fix: "Add the experiment tag to that page" }
+    : { ok: true, label: "Tracking fires on every variant" });
+  if (isUrlTest(e)) {
+    const norm = (u) => u.replace(/^https?:\/\/[^/]+/, "").replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+    const dead = e.urlVariants.slice(1).filter((v) => v.url.startsWith("/") && !state.pages.some((x) => x.status === "live" && norm(x.path) === norm(v.url)));
+    items.push({ ok: !dead.length, label: "Every variant URL is live (returns 200)", fix: dead.length ? `No published page at ${dead.map((v) => v.url).join(", ")}` : "" });
+  }
   if (e.type === "bandit") items.push({ ok: S_metricType(e) === "binomial", label: "Bandit decision metric is a conversion metric", fix: "Bandits need a conversion (yes/no) primary metric" });
   if (state.settings.requireHypothesis) items.push({ ok: !!e.hypothesis, label: "Hypothesis written", fix: "Your settings require a hypothesis before starting" });
   state.launchChecklist.forEach((c) => items.push(c.required ? { ok: !!e.checklist?.[c.id], manual: c.id, label: c.text, fix: "Tick it in the launch checklist" } : { ok: true, warn: !e.checklist?.[c.id], manual: c.id, label: c.text, optional: true }));
@@ -302,6 +318,7 @@ export function reconcile() {
         e.scheduledStart = null;
         e.notice = { tone: "warn", text: `Scheduled start skipped: ${why.fix || why.label}. It's back to Draft.` };
         e.history.push({ at: t, by: "system", text: "Scheduled start skipped; back to Draft" });
+        notifyOwner(e, `scheduled start skipped (${why.fix || why.label})`);
       } else {
         e.status = "running";
         e.startedAt = e.scheduledStart;
@@ -309,6 +326,7 @@ export function reconcile() {
         openPhase(e, e.startedAt, "Started on schedule");
         e.sim = e.sim || simFor(e);
         e.history.push({ at: e.startedAt, by: "system", text: "Started on schedule" });
+        notifyOwner(e, "experiment started on schedule");
       }
       e.updatedAt = t;
       changed = true;
@@ -321,6 +339,7 @@ export function reconcile() {
       e.stoppedAutomatically = true;
       e.releasedVariantId = isUrlTest(e) ? e.variantIds[0] : page(e.pageId)?.defaultVariantId ?? null;
       e.history.push({ at: sd, by: "system", text: "Stopped automatically on its stop date" });
+      notifyOwner(e, "experiment stopped on its end date; results are ready to record");
       e.updatedAt = t;
       changed = true;
     }

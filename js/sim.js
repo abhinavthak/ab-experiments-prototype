@@ -144,7 +144,8 @@ export function generate(e) {
           const sum = adj.reduce((a, b) => a + b, 0);
           weights = adj.map((x) => (x / sum) * 100);
         } else {
-          weights = vs.map(() => 100 / vs.length);
+          // Burn-in: the starting split the team chose.
+          weights = ph.weights.map(Number);
         }
         dayWeights = weights;
       }

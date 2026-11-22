@@ -2,7 +2,7 @@
 //   Overview → Page & variants → Targeting → Metrics → Analysis → Review.
 // Also: "Analyze a past experiment" (import), and the power estimate.
 import * as S from "../store.js";
-import { openModal, closeModal, icon, variantChip, chip, callout, tagPicker, multiPicker } from "../ui.js";
+import { openModal, closeModal, icon, variantChip, chip, callout, tagPicker, multiPicker, infoTip } from "../ui.js";
 import { esc, slugify, toast, fmtInt, fmtPct, DAY, fmtDate, hash, rng, VARIANT_COLORS, uid } from "../util.js";
 import { go } from "../actions.js";
 import { sampleSizePerVariant } from "../stats.js";
@@ -118,15 +118,34 @@ export function powerTable(e, { compact = false } = {}) {
   return compact ? `${facts}${verdict}<details class="adv"><summary>Days needed for other lifts</summary><div style="margin-top:10px">${table}</div></details>` : `${facts}${verdict}${table}`;
 }
 
+const INFO = {
+  overview: ["Experiment details", ["Name: unique and descriptive", "Hypothesis: If we change X, Y will improve because Z", "Owner is notified on launch, stop and results", "Tags help filter the experiments list"]],
+  type: ["Testing type", ["A/B: fixed split for the whole run; best for a clean readout", "Bandit: shifts traffic toward the better variant as data comes in; best for short campaigns"]],
+  category: ["Category", ["URL vs URL: two separate live pages; visitors are redirected to the variant URL", "Original vs Variant: versions of one CMS page; same URL, content swapped"]],
+  pages: ["Pick pages", ["Only published pages can be selected", "Variant URL must be live and return 200", "A page can be in only one running experiment at a time"]],
+  split: ["Traffic split", ["Defaults to an equal split", "Must add up to 100%", "Bandit: starting split only; reallocated after launch"]],
+  targeting: ["Targeting", ["Audience and device default to All / Both", "Custom conditions, e.g. UTM source or city, are combined with AND", "Narrower targeting = less traffic = longer run"]],
+  rollout: ["Rollout %", ["Share of targeted traffic that enters the experiment; the rest sees the original", "Start at 10–20% for risky changes"]],
+  metrics: ["Metrics", ["Primary: decides the winner; bandits support conversion metrics only", "Guardrail: must not get worse than its cutoff", "Secondary: context only, not used to pick the winner"]],
+  plan: ["Analysis plan", ["Duration: full weeks, minimum 7 days", "Minimum detectable lift: smallest change worth detecting; a smaller lift needs more traffic and time"]],
+  fits: ["Plan check", "Sample needed is estimated from traffic, rollout % and lift. If the run is too short: run longer, accept a bigger lift or raise rollout."],
+  stats: ["Statistic type", ["Bayesian: probability to beat the original; locked for bandits", "Frequentist: p-value and 95% confidence interval"]],
+  sequential: ["Sequential testing", ["On: you can check results and stop early safely", "Off: read results only at the planned end date"]],
+  review: ["Review", "Summary of every setting; edit any section before creating the draft."],
+};
+const tip = (k) => infoTip(INFO[k][0], INFO[k][1]);
+export const DURATIONS = [7, 14, 21, 28, 35, 42, 56];
+const weeksLabel = (dd) => `${dd / 7} week${dd === 7 ? "" : "s"} (${dd} days)`;
+
 const STEP_HEAD = {
   basics: ["What are you testing?", "Name it and say what you expect to happen."],
-  variants: ["What will visitors see?", "Pick the page and the versions to compare."],
+  variants: ["How will you test it?", "Choose the testing type, what you compare, and the traffic split."],
   targeting: ["Who's in the test?", "Everyone who visits the page, unless you narrow it down."],
   metrics: ["How will you pick a winner?", "One metric decides. Guardrails catch harm."],
-  analysis: ["How long will it run?", "Set a stop date and the smallest lift you care about."],
+  analysis: ["How long will it run?", "Set the duration and the smallest lift worth detecting, then the statistics."],
   review: ["Check and create", "Creating saves a draft. Nothing goes live until you start it."],
 };
-const STEPS = [["basics", "Overview"], ["variants", "Page & variants"], ["targeting", "Targeting"], ["metrics", "Metrics"], ["analysis", "Analysis"], ["review", "Review"]];
+const STEPS = [["basics", "Overview"], ["variants", "Type & variants"], ["targeting", "Targeting"], ["metrics", "Metrics"], ["analysis", "Analysis plan"], ["review", "Review"]];
 
 export function openCreate(prefPageId, { type = "standard" } = {}) {
   if (!S.canEdit()) {
@@ -137,7 +156,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   const d = S.newExperimentDraft();
   d.type = type;
   const pages = [...st.pages].sort((a, b) => (eligibility(a) ? 1 : 0) - (eligibility(b) ? 1 : 0));
-  const firstOk = (prefPageId && S.page(prefPageId) && prefPageId) || pages.find((p) => !eligibility(p))?.id || null;
+  const firstOk = (prefPageId && S.page(prefPageId)?.status === "live" && prefPageId) || pages.find((p) => !eligibility(p))?.id || null;
   const evenWeights = (n) => Array.from({ length: n }, (_, i) => (i === 0 ? 100 - Math.floor(100 / n) * (n - 1) : Math.floor(100 / n)));
   const KEYS = "ABCDE";
   // Split URL: A is the chosen page's own URL; B.. are URLs visitors get redirected to.
@@ -161,23 +180,23 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   const urlStep = () => {
     const rows = urlRows();
     const bandit = d.type === "bandit";
-    const weight = (v, i) => (bandit ? `<span class="faint" style="font-size:13px">auto</span>` : `<div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${d.weights[i] ?? 0}" aria-label="Split for ${v.key}"><span>%</span></div>`);
+    const weight = (v, i) => (`<div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${d.weights[i] ?? 0}" aria-label="Split for ${v.key}"><span>%</span></div>`);
     const paths = st.pages.filter((x) => x.id !== d.pageId).map((x) => `<option value="${esc(x.path)}">${esc(x.name)}</option>`).join("");
     const last = rows[rows.length - 1]?.key;
-    return `<div class="field"><span class="label">URLs ${bandit ? "· arms" : "&amp; split"}</span>
+    return `<div class="field"><span class="label">URLs &amp; ${bandit ? "starting split" : "split"} ${tip("split")}</span>
       <datalist id="cms-paths">${paths}</datalist>
       ${rows.map((v, i) => i === 0
         ? `<div class="url-row">${chip(0)}<div class="url-main"><b>Original</b> <span class="badge">Control</span><div class="small mono" style="margin:2px 0 0">${esc(v.url)}</div></div>${weight(v, i)}<span></span></div>`
         : `<div class="url-row">${chip(i)}<div class="url-main url-inputs"><input class="inp mono" name="uurl-${i}" list="cms-paths" value="${esc(v.url)}" placeholder="/new-landing-page or https://…" aria-label="URL for ${v.key}" autocomplete="off"><input class="inp" name="uname-${i}" value="${esc(v.name)}" placeholder="Name, e.g. Redesigned page" aria-label="Name for ${v.key}"></div>${weight(v, i)}${rows.length > 2 ? `<button type="button" class="btn xs ghost" data-local="u-del" data-i="${i}" aria-label="Remove ${v.key}">${icon.x(16)}</button>` : "<span></span>"}</div><div data-err="uurl-${i}"></div>`).join("")}
-      <div class="row" style="justify-content:space-between;margin-top:10px"><div class="row" style="gap:8px">${rows.length < 5 ? `<button type="button" class="btn xs" data-local="u-add">${icon.plus(14)} Add URL</button>` : ""}${bandit ? "" : `<button type="button" class="btn xs" data-local="even">Split evenly</button>`}</div>${bandit ? `<span class="hint" style="margin:0">Starts even, then re-weights daily toward the best URL.</span>` : `<b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b>`}</div>
+      <div class="row" style="justify-content:space-between;margin-top:10px"><div class="row" style="gap:8px">${rows.length < 5 ? `<button type="button" class="btn xs" data-local="u-add">${icon.plus(14)} Add URL</button>` : ""}<button type="button" class="btn xs" data-local="even">Split evenly</button></div><b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b></div>${bandit ? `<div class="hint">Bandit: this is the starting split. After launch, traffic is reallocated daily toward the better URL (never below 2%).</div>` : ""}
       <div data-err="split"></div>
-      <div class="hint">Choose another CMS page from the list or paste any URL. Visitors assigned to ${rows.length > 2 ? `B–${last}` : "B"} get a temporary (302) redirect and keep their UTM parameters. Each URL needs the lead form so conversions are counted.</div></div>`;
+      <div class="hint">Choose another CMS page from the list or paste any URL. Visitors assigned to ${rows.length > 2 ? `B–${last}` : "B"} get a temporary (302) redirect and keep their UTM parameters. Each URL must be live (return 200) and have the lead form so conversions are counted.</div></div>`;
   };
   setPage(firstOk);
   let step = 0;
   let seen = 0;
   let keyTouched = false;
-  let statsOpen = false;
+  let planOverride = false;
   let dirty = false;
 
   const steps = {
@@ -185,10 +204,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const cfs = st.customFields;
       const needCf = cfs.some((f) => f.required);
       return `
-      <div class="field"><span class="label">Type</span><div class="type-cards compact" role="radiogroup" aria-label="Experiment type">
-        ${[["standard", "A/B test", "Fixed split; pick a winner with confidence."], ["bandit", "Multi-armed bandit", "Shifts traffic to the best variant each day."]]
-          .map(([k, t, sub]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>
-      <div class="field"><label for="c-name">Name</label><input id="c-name" name="name" class="inp" autocomplete="off" value="${esc(d.name)}" placeholder="e.g. Online BBA — banner &amp; sticky CTA">
+      <div class="field"><label for="c-name">Name ${tip("overview")}</label><input id="c-name" name="name" class="inp" autocomplete="off" value="${esc(d.name)}" placeholder="e.g. Online BBA — banner &amp; sticky CTA">
         <div class="key-line">Tracking key <span class="mono" data-keytext>${esc(d.trackingKey) || "—"}</span> <button type="button" class="link-btn" data-local="key-edit">Edit</button></div><div data-err="name"></div></div>
       <div class="field" data-keyfield ${keyTouched ? "" : "hidden"}><label for="c-key">Tracking key</label><input id="c-key" name="key" class="inp mono" autocomplete="off" value="${esc(d.trackingKey)}"><div class="hint">Sent with every exposure and lead. Lowercase letters, numbers and hyphens. Locked once started.</div><div data-err="key"></div></div>
       <div class="field"><label for="c-hyp">Hypothesis ${st.settings.requireHypothesis ? "" : `<span class="opt">· optional</span>`}</label><textarea id="c-hyp" name="hypothesis" class="inp" rows="3" placeholder="If we … then … because …">${esc(d.hypothesis)}</textarea><div data-err="hypothesis"></div></div>
@@ -202,24 +218,27 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
       const isUrl = d.testKind === "url";
-      const kindCards = `<div class="field"><span class="label">What are you comparing?</span><div class="type-cards compact" role="radiogroup" aria-label="What are you comparing">
+      const typeCards = `<div class="field"><span class="label">Testing type ${tip("type")}</span><div class="type-cards compact" role="radiogroup" aria-label="Testing type">
+        ${[["standard", "A/B test", "Fixed split for the whole run; a clean readout."], ["bandit", "Multi-armed bandit", "Shifts traffic toward the better variant as data comes in."]]
+          .map(([k, t, sub]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
+      const kindCards = typeCards + `<div class="field"><span class="label">Category of testing ${tip("category")}</span><div class="type-cards compact" role="radiogroup" aria-label="What are you comparing">
         ${[["variants", "Original vs variant", "Same URL; the CMS swaps sections of the page."], ["url", "URL vs URL", "Split URL; some visitors are redirected to another page."]]
           .map(([k, t, sub]) => `<label class="check ${d.testKind === k ? "on" : ""}"><input type="radio" name="kind" value="${k}" ${d.testKind === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
       const pageWhy = (x) => {
         if (isUrl) {
           const a = S.activeExpOnPage(x.id, d.id);
-          return a ? `${a.status} experiment` : x.status !== "live" ? "draft page" : x.path;
+          return x.status !== "live" ? "draft page, publish first" : a ? `${a.status} experiment` : x.path;
         }
+        if (x.status !== "live") return "draft page, publish first";
         const why = eligibility(x);
         return why ? why.toLowerCase() : `${x.variants.length} variants`;
       };
-      const pageField = `<div class="field"><label for="c-page">${isUrl ? "Original page · A (Control)" : "Page to test"}</label>
-        <select id="c-page" name="page" class="inp"><option value="">Choose a page</option>${pages.map((x) => `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""}>${esc(x.name)} — ${esc(pageWhy(x))}</option>`).join("")}</select>`;
+      const pageField = `<div class="field"><label for="c-page">${isUrl ? "Original page · A (Control)" : "Page to test"} ${tip("pages")}</label>
+        <select id="c-page" name="page" class="inp"><option value="">Choose a published page</option>${pages.map((x) => `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""} ${x.status !== "live" ? "disabled" : ""}>${esc(x.name)} — ${esc(pageWhy(x))}</option>`).join("")}</select>`;
       const conflict = (() => {
         if (!p) return "";
         const other = S.activeExpOnPage(p.id, d.id);
         if (other) return callout("warn", `“${esc(other.name)}” is ${other.status} on this page. You can set this up now as a draft and start it once that one ends.`);
-        if (p.status !== "live") return callout("warn", `${esc(p.name)} is a draft page. You can set this up now; publish the page before starting.`);
         return "";
       })();
       if (isUrl) return `${kindCards}${pageField}
@@ -228,15 +247,16 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       return `${kindCards}${pageField}
         ${p ? `<div class="hint mono">${esc(p.path)}</div>` : ""}<div data-err="page"></div></div>
       ${conflict}
-      ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants ${d.type === "bandit" ? "· arms" : "& split"}</span>
+      ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants &amp; ${d.type === "bandit" ? "starting split" : "split"} ${tip("split")}</span>
         ${p.variants.map((v) => {
           const i = d.variantIds.indexOf(v.id);
           const on = i >= 0;
           const isDef = v.id === p.defaultVariantId;
           return `<div class="var-row">${variantChip(v)}<label class="row" style="gap:8px;min-width:0;cursor:${isDef ? "default" : "pointer"}"><input type="checkbox" name="variant" value="${v.id}" ${on ? "checked" : ""} ${isDef ? "disabled" : ""} style="accent-color:var(--primary)"><span><b>${esc(v.name)}</b>${isDef ? ` <span class="badge">Control · page default</span>` : ""}<span class="small" style="display:block;margin:2px 0 0">${isDef ? `What everyone sees today · ${p.sections} sections` : `${v.changes} change${v.changes === 1 ? "" : "s"} vs default`}</span></span></label>
-            ${d.type === "bandit" ? `<span class="faint" style="font-size:13px">${on ? "auto" : ""}</span>` : `<div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${on ? d.weights[i] : 0}" ${on ? "" : "disabled"} aria-label="Split for ${esc(v.key)}"><span>%</span></div>`}<span></span></div>`;
+            <div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${on ? d.weights[i] : 0}" ${on ? "" : "disabled"} aria-label="Split for ${esc(v.key)}"><span>%</span></div><span></span></div>`;
         }).join("")}
-        <div class="row" style="justify-content:space-between;margin-top:10px">${d.type === "bandit" ? `<span class="hint" style="margin:0">Starts even, then re-weights daily toward the best arm (never below 2%).</span>` : `<button type="button" class="btn xs" data-local="even">Split evenly</button><b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b>`}</div>
+        <div class="row" style="justify-content:space-between;margin-top:10px"><button type="button" class="btn xs" data-local="even">Split evenly</button><b data-total>Total ${Math.round(d.weights.reduce((a, b) => a + Number(b || 0), 0))}%</b></div>
+        ${d.type === "bandit" ? `<div class="hint">Bandit: this is the starting split. After launch, traffic is reallocated daily toward the better variant (never below 2%).</div>` : ""}
         <div data-err="variants"></div><div data-err="split"></div>
         <a href="#/page/${p.id}" data-act="modal-close-nav" class="hint" style="display:inline-block">Create or edit variants in the page editor →</a></div>`}
       ${p && p.variants.length < 2 ? `<div style="border:1px dashed var(--text-4);border-radius:12px;padding:24px;text-align:center"><b>${esc(p.name)} has only its default variant</b><div class="muted" style="margin:6px 0 14px">Create at least one more variant in the page editor, then come back.</div><a class="btn sm" href="#/page/${p.id}" data-act="modal-close-nav">${icon.ext()} Open page editor</a></div>` : ""}`;
@@ -244,12 +264,12 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     targeting: () => {
       const t = d.targeting;
       const hashLabel = HASH_ATTRS.find(([k]) => k === d.assignment.hashAttribute)?.[1] || "";
-      return `<div class="row"><div class="grow field"><label for="c-aud">Audience</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      return `<div class="row"><div class="grow field"><label for="c-aud">Audience ${tip("targeting")}</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
         <div class="grow field"><label for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="field" style="width:150px"><label for="c-cov">Rollout</label><div class="pct-input"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div></div></div>
+        <div class="field" style="width:150px"><label for="c-cov">Rollout ${tip("rollout")}</label><div class="pct-input"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div></div></div>
       <div data-err="coverage"></div>
       <div class="reach" data-reach></div>
-      <div class="field"><span class="label">Only include visitors who match <span class="opt">· optional</span></span><div class="hint" style="margin:0 0 10px">Each rule reads as a sentence. A visitor must match every rule; everyone else sees the original and isn't counted.</div>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
+      <div class="field"><span class="label">Custom conditions <span class="opt">· optional</span></span><div class="hint" style="margin:0 0 10px">Each rule reads as a sentence. A visitor must match every rule; everyone else sees the original and isn't counted.</div>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
       <details class="adv"><summary>Advanced <span class="opt">· ${t.excludeLeads ? "excluding existing leads · " : ""}assigned by ${esc(hashLabel.toLowerCase())}${d.assignment.sticky ? ", sticky" : ""}</span></summary>
         <label class="check" style="margin:12px 0"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
         <div class="row"><div class="grow field"><label for="c-hash">Assign variants by</label><select id="c-hash" name="hash" class="inp">${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${d.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
@@ -259,21 +279,38 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     metrics: () => {
       const p = S.page(d.pageId);
       const opts = st.metrics.filter((m) => !(m.requires === "leadForm" && p && !p.hasLeadForm)).map((m) => [m.id, m.name]);
-      return `<div class="field"><label for="c-primary">${d.type === "bandit" ? "Decision metric" : "Primary metric"}</label><select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div class="hint">The one number that decides the winner.</div><div data-err="primary"></div></div>
+      return `<div class="field"><label for="c-primary">${d.type === "bandit" ? "Decision metric" : "Primary metric"} ${tip("metrics")}</label><select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div class="hint">The one number that decides the winner.${d.type === "bandit" ? " Bandits support conversion metrics only." : ""}</div><div data-err="primary"></div></div>
         <div class="row"><div class="grow field"><label for="c-guard">Guardrails <span class="opt">· optional</span></label>${multiPicker({ id: "c-guard", name: "guardrail", options: opts, selected: d.guardrailMetrics, placeholder: "e.g. Bounce rate" })}<div class="hint">Fail if a variant is clearly worse by more than each metric's cutoff (e.g. Bounce rate 3%).</div></div>
-          <div class="grow field"><label for="c-sec">Secondary <span class="opt">· optional</span></label>${multiPicker({ id: "c-sec", name: "secondary", options: opts, selected: d.secondaryMetrics, placeholder: "Add metrics" })}<div class="hint">Help explain why the winner won.</div></div></div>
+          <div class="grow field"><label for="c-sec">Secondary <span class="opt">· optional</span></label>${multiPicker({ id: "c-sec", name: "secondary", options: opts, selected: d.secondaryMetrics, placeholder: "Add metrics" })}<div class="hint">Context only; not used to pick the winner.</div></div></div>
         <details class="adv" ${d.activationMetric ? "open" : ""}><summary>Activation metric <span class="opt">· optional</span></summary>
           <div class="field" style="margin:12px 0 0"><label class="sr-only" for="c-act">Activation metric</label><select id="c-act" name="activation" class="inp">${metricOptions(d.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only analyse visitors who did this, e.g. scrolled to the fee section.</div></div></details>`;
     },
     analysis: () => {
-      const engine = d.statsEngine === "bayesian" ? "Bayesian" : `Frequentist${d.sequential ? ", sequential" : ""}`;
-      return `<div class="row"><div class="grow field"><label for="c-stop">Stop</label><select id="c-stop" name="stop" class="inp">${[null, 7, 14, 21, 28, 42].map((o) => `<option value="${o ?? ""}" ${o === d.stopAfterDays ? "selected" : ""}>${o ? `${o} days after start` : "Manually"}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="c-mde">Smallest lift worth detecting</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div>
+      const bandit = d.type === "bandit";
+      const pe = powerEstimate(d);
+      const row = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
+      const short = row && row.days > d.stopAfterDays;
+      const fixes = (() => {
+        if (!short) return "";
+        const out = [];
+        const dur = DURATIONS.find((x) => x >= row.days);
+        if (dur) out.push(`<button type="button" class="btn xs" data-local="plan-fix" data-stop="${dur}">Run ${weeksLabel(dur)}</button>`);
+        const lift = pe.rows.find((r) => r.mde > d.plannedMde && r.days <= d.stopAfterDays);
+        if (lift) out.push(`<button type="button" class="btn xs" data-local="plan-fix" data-mde="${lift.mde}">Detect a ${fmtPct(lift.mde, 0)} lift instead</button>`);
+        if (d.coverage < 100) out.push(`<button type="button" class="btn xs" data-goto="2">Raise rollout (now ${d.coverage}%)</button>`);
+        return `<div class="plan-fix">${out.join("")}</div><label class="check" style="margin:-6px 0 16px"><input type="checkbox" name="planOverride" ${planOverride ? "checked" : ""}><span><span class="t1">Run it anyway</span><span class="t2">Results may end as No clear winner.</span></span></label>`;
+      })();
+      return `<div class="row"><div class="grow field"><label for="c-stop">Experiment duration ${tip("plan")}</label><select id="c-stop" name="stop" class="inp">${DURATIONS.map((o) => `<option value="${o}" ${o === d.stopAfterDays ? "selected" : ""}>${weeksLabel(o)}</option>`).join("")}</select></div>
+        <div class="grow field"><label for="c-mde">Minimum detectable lift</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div>
+      <div class="label" style="margin-bottom:8px">Plan check ${tip("fits")}</div>
       ${powerTable(d, { compact: true })}
-      <details class="adv" data-stats ${statsOpen ? "open" : ""}><summary>Statistics <span class="opt">· ${engine}${d.cuped ? ", CUPED" : ""}</span></summary>
-        <div style="margin-top:12px"><div class="type-cards compact" style="margin-bottom:10px">${[["bayesian", "Bayesian", "Chance to beat Control, and risk"], ["frequentist", "Frequentist", "p-values and confidence intervals"]].map(([k, t, sub]) => `<label class="check ${d.statsEngine === k ? "on" : ""}"><input type="radio" name="engine" value="${k}" ${d.statsEngine === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div>
-        <label class="check" style="margin-bottom:8px"><input type="checkbox" name="sequential" ${d.sequential ? "checked" : ""} ${d.statsEngine === "frequentist" ? "" : "disabled"}><span><span class="t1">Sequential testing</span><span class="t2">Frequentist only. Safe to check results any time.</span></span></label>
-        <label class="check"><input type="checkbox" name="cuped" ${d.cuped ? "checked" : ""}><span><span class="t1">CUPED variance reduction</span><span class="t2">Uses pre-test behaviour to tighten intervals</span></span></label></div></details>`;
+      <div data-err="plan"></div>
+      ${fixes}
+      <div class="field"><span class="label">Statistic type ${tip("stats")}</span><div class="type-cards compact stat-cards">${[["bayesian", "Bayesian", "Probability to beat the original, and risk"], ["frequentist", "Frequentist", "p-value and 95% confidence interval"]].map(([k, t, sub]) => {
+        const off = bandit && k === "frequentist";
+        return `<label class="check ${d.statsEngine === k ? "on" : ""} ${off ? "disabled" : ""}"><input type="radio" name="engine" value="${k}" ${d.statsEngine === k ? "checked" : ""} ${off ? "disabled" : ""}><span><span class="t1">${t}</span><span class="t2">${off ? "Not available for bandits" : sub}</span></span></label>`;
+      }).join("")}</div>${bandit ? `<div class="hint">Bandits always use Bayesian.</div>` : ""}</div>
+      ${d.statsEngine === "frequentist" ? `<label class="check"><input type="checkbox" name="sequential" ${d.sequential ? "checked" : ""}><span><span class="t1">Enable sequential testing ${tip("sequential")}</span><span class="t2">${d.sequential ? "On: you can check results and stop early safely." : "Off: read results only at the planned end date."}</span></span></label>` : ""}`;
     },
     review: () => {
       const p = S.page(d.pageId);
@@ -367,7 +404,9 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     } else if (k === "variants") {
       const p = S.page(d.pageId);
       d.testKind = fd.get("kind") || d.testKind;
+      d.type = fd.get("type") || d.type;
       if (!p) errs.page = "Choose a page";
+      else if (p.status !== "live") errs.page = "Only published pages can be tested. Publish this page first.";
       else if (d.testKind === "url") {
         syncUrl();
         const rows = d.urlVariants;
@@ -383,20 +422,25 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
           else if (rows.slice(1, i).some((x) => norm(x.url) === norm(v.url))) errs[`uurl-${i}`] = "Same URL as another variant";
         });
         rows.forEach((v, i) => { if (i > 0 && !v.name) v.name = `URL ${v.key}`; });
-        d.weights = d.type === "bandit" ? evenWeights(rows.length) : rows.map((v) => Number(fd.get(`w-${v.id}`)) || 0);
+        rows.forEach((v, i) => {
+          if (i === 0 || errs[`uurl-${i}`] || !v.url.startsWith("/")) return;
+          const pg = st.pages.find((x) => norm(x.path) === norm(v.url));
+          if (!pg) errs[`uurl-${i}`] = "No published CMS page at this URL. Publish it first, or use a full https:// address.";
+          else if (pg.status !== "live") errs[`uurl-${i}`] = `${pg.name} is a draft. Only published pages can be used.`;
+        });
+        d.weights = rows.map((v) => Number(fd.get(`w-${v.id}`)) || 0);
         const sum = Math.round(d.weights.reduce((a, b) => a + b, 0));
-        if (d.type !== "bandit" && sum !== 100) errs.split = `The split adds up to ${sum}%, not 100%`;
-        else if (d.type !== "bandit" && d.weights.some((w) => w <= 0)) errs.split = "Every URL needs some traffic";
+        if (sum !== 100) errs.split = `The split adds up to ${sum}%, not 100%`;
+        else if (d.weights.some((w) => w <= 0)) errs.split = "Every URL needs some traffic";
       } else if (p.variants.length < 2) errs.page = "This page has only its default variant. Add a variant in the page editor first.";
       else {
         const picked = fd.getAll("variant");
         const ids = [p.defaultVariantId, ...p.variants.filter((v) => picked.includes(v.id)).map((v) => v.id)];
         d.variantIds = ids;
-        if (d.type !== "bandit") d.weights = ids.map((id) => Number(fd.get(`w-${id}`)) || 0);
-        else d.weights = ids.map((_, i) => (i === 0 ? 100 - Math.floor(100 / ids.length) * (ids.length - 1) : Math.floor(100 / ids.length)));
+        d.weights = ids.map((id) => Number(fd.get(`w-${id}`)) || 0);
         if (ids.length < 2) errs.variants = "Select at least one variant besides Control";
-        else if (d.type !== "bandit" && Math.round(d.weights.reduce((a, b) => a + b, 0)) !== 100) errs.split = `The split adds up to ${Math.round(d.weights.reduce((a, b) => a + b, 0))}%, not 100%`;
-        else if (d.type !== "bandit" && d.weights.some((w) => w <= 0)) errs.split = "Every variant needs some traffic";
+        else if (Math.round(d.weights.reduce((a, b) => a + b, 0)) !== 100) errs.split = `The split adds up to ${Math.round(d.weights.reduce((a, b) => a + b, 0))}%, not 100%`;
+        else if (d.weights.some((w) => w <= 0)) errs.split = "Every variant needs some traffic";
       }
     } else if (k === "targeting") {
       d.targeting = { audience: fd.get("audience"), device: fd.get("device"), excludeLeads: !!fd.get("excludeLeads"), conditions: readConditions(form, "cond") };
@@ -411,11 +455,14 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       d.activationMetric = fd.get("activation") || null;
       if (!d.primaryMetric) errs.primary = "Choose a primary metric";
     } else if (k === "analysis") {
-      d.statsEngine = fd.get("engine");
+      d.statsEngine = d.type === "bandit" ? "bayesian" : fd.get("engine") || d.statsEngine;
       d.sequential = d.statsEngine === "frequentist" && !!fd.get("sequential");
-      d.cuped = !!fd.get("cuped");
-      d.stopAfterDays = fd.get("stop") ? Number(fd.get("stop")) : null;
+      d.stopAfterDays = Number(fd.get("stop")) || 21;
       d.plannedMde = Number(fd.get("mde"));
+      planOverride = !!fd.get("planOverride");
+      const pe = powerEstimate(d);
+      const row = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
+      if (row && row.days > d.stopAfterDays && !planOverride) errs.plan = `To detect a ${fmtPct(d.plannedMde, 0)} lift this test needs about ${row.days > 365 ? "more than a year" : `${row.days} days`}, but it runs ${d.stopAfterDays}. Use a fix below, or tick Run it anyway.`;
     }
     return errs;
   };
@@ -457,12 +504,6 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     wireFooter(form);
     const k = STEPS[step][0];
     if (k === "basics") {
-      form.querySelectorAll("input[name=type]").forEach((r) => r.addEventListener("change", () => {
-        d.type = r.value;
-        if (d.type === "bandit" && S.metric(d.primaryMetric)?.type !== "binomial") d.primaryMetric = null;
-        form.querySelectorAll(".type-cards .check").forEach((c) => c.classList.toggle("on", c.querySelector("input").checked));
-        form.querySelector("#modal-title").textContent = "New experiment";
-      }));
       const keyText = form.querySelector("[data-keytext]");
       form.name.addEventListener("input", () => {
         if (!keyTouched) form.key.value = S.uniqueKey(slugify(form.name.value));
@@ -479,6 +520,16 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       });
     }
     if (k === "variants") {
+      form.querySelectorAll("input[name=type]").forEach((r) => r.addEventListener("change", () => {
+        collect(form);
+        d.type = r.value;
+        if (d.type === "bandit") {
+          d.statsEngine = "bayesian";
+          d.sequential = false;
+          if (S.metric(d.primaryMetric) && S.metric(d.primaryMetric).type !== "binomial") d.primaryMetric = null;
+        }
+        paint();
+      }));
       form.querySelectorAll("input[name=kind]").forEach((r) => r.addEventListener("change", () => {
         d.testKind = r.value;
         d.weights = [];
@@ -548,9 +599,14 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       reach();
     }
     if (k === "analysis") {
-      form.querySelector("[data-stats]")?.addEventListener("toggle", (ev) => (statsOpen = ev.target.open));
+      form.querySelectorAll("[data-local=plan-fix]").forEach((b) => b.addEventListener("click", () => {
+        collect(form);
+        if (b.dataset.stop) d.stopAfterDays = Number(b.dataset.stop);
+        if (b.dataset.mde) d.plannedMde = Number(b.dataset.mde);
+        paint();
+      }));
       form.addEventListener("change", (ev) => {
-        if (STEPS[step][0] === "analysis" && ["engine", "stop", "mde"].includes(ev.target.name)) {
+        if (STEPS[step][0] === "analysis" && ["engine", "stop", "mde", "sequential", "planOverride"].includes(ev.target.name)) {
           collect(form);
           paint();
         }

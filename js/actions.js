@@ -48,7 +48,7 @@ export function startExperiment(e) {
   openModal({
     title: "Start this experiment?",
     ic: icon.play(18), tone: "blue",
-    body: `<p style="margin-top:0"><b>${esc(e.name)}</b> will go live to ${e.coverage}% of ${esc(p.name)} visitors${e.type === "bandit" ? ", starting with an even split that then adapts daily toward the best arm" : `, split ${esc(splitText(e))}`}.</p>
+    body: `<p style="margin-top:0"><b>${esc(e.name)}</b> will go live to ${e.coverage}% of ${esc(p.name)} visitors${e.type === "bandit" ? `, starting at ${esc(splitText(e))} and then adapting daily toward the best arm` : `, split ${esc(splitText(e))}`}.</p>
       ${list}
       ${callout("info", "Once started, you can't add or remove variants, change the split, change the primary metric, change the tracking key, or change the page default.")}`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Start now</button>`,
@@ -60,6 +60,7 @@ export function startExperiment(e) {
       e.sim = e.sim || S.simFor(e);
       S.openPhase(e, e.startedAt, "Started");
       S.log(e, "Started the experiment");
+      S.notifyOwner(e, "experiment started");
       S.save();
       closeModal();
       toast("Experiment started", "good");
@@ -71,6 +72,7 @@ export function startExperiment(e) {
 // S3
 export function scheduleExperiment(e) {
   if (!guard(e, "schedule")) return;
+  if (S.startChecks(e).blocked) return startExperiment(e); // shows what to fix first
   const other = S.activeExpOnPage(e.pageId, e.id);
   if (other) {
     openModal({ title: "Can't schedule yet", ic: icon.warn(18), tone: "amber",
@@ -78,28 +80,31 @@ export function scheduleExperiment(e) {
       footer: `<a class="btn sm" href="#/experiment/${other.id}/overview" data-act="modal-close-nav">Open experiment</a><button type="button" class="btn sm primary" data-act="modal-close">OK</button>` });
     return;
   }
-  const base = new Date(e.scheduledStart ?? S.now() + DAY);
+  // Dates and times are entered in IST (UTC+5:30), whatever the browser's zone.
+  const IST = 5.5 * 3600000;
+  const ist = new Date((e.scheduledStart ?? S.now() + DAY) + IST);
   const pad = (n) => String(n).padStart(2, "0");
-  const dVal = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
-  const tVal = e.scheduledStart ? `${pad(base.getHours())}:${pad(base.getMinutes())}` : "09:00";
+  const dVal = `${ist.getUTCFullYear()}-${pad(ist.getUTCMonth() + 1)}-${pad(ist.getUTCDate())}`;
+  const tVal = e.scheduledStart ? `${pad(ist.getUTCHours())}:${pad(ist.getUTCMinutes())}` : "09:00";
+  const toTs = (dd, tt) => new Date(`${dd}T${tt}:00+05:30`).getTime();
   openModal({
     title: e.status === "scheduled" ? "Reschedule start" : "Schedule start",
     ic: icon.calendar(18), tone: "blue",
     body: `<div class="row"><div class="grow field"><label for="s-date">Date</label><input id="s-date" name="date" type="date" class="inp" value="${dVal}" required></div>
-      <div class="grow field"><label for="s-time">Time (local)</label><input id="s-time" name="time" type="time" class="inp" value="${tVal}" required></div></div>
+      <div class="grow field"><label for="s-time">Time (IST)</label><input id="s-time" name="time" type="time" class="inp" value="${tVal}" required></div></div>
       <div id="s-info" class="hint"></div><div id="s-err"></div>
-      <p class="hint">A scheduled test is still editable, and can be started now or unscheduled. If the page isn't live at start time, the start is skipped and it goes back to Draft.</p>`,
+      <p class="hint">It starts automatically at this time and the owner is notified. If a launch check fails by then (for example the page was unpublished), the start is skipped, it goes back to Draft and the owner is told why.</p>`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">Schedule</button>`,
     onOpen: (form) => {
       const upd = () => {
-        const t = new Date(`${form.date.value}T${form.time.value}`).getTime();
+        const t = toTs(form.date.value, form.time.value);
         form.querySelector("#s-info").textContent = e.stopAfterDays && isFinite(t) ? `Stops ${e.stopAfterDays} days later, on ${fmtDate(t + e.stopAfterDays * DAY)}.` : "No stop date set.";
       };
       form.addEventListener("input", upd);
       upd();
     },
     onSubmit: (fd, form) => {
-      const t = new Date(`${fd.get("date")}T${fd.get("time")}`).getTime();
+      const t = toTs(fd.get("date"), fd.get("time"));
       if (!isFinite(t) || t <= S.now()) {
         form.querySelector("#s-err").innerHTML = `<div class="err">${icon.warn(14)} Pick a time in the future</div>`;
         form.date.setAttribute("aria-invalid", "true");
@@ -223,6 +228,7 @@ export function stopExperiment(e, { preset = null } = {}) {
       const rel = vs.find((v) => v.id === e.releasedVariantId);
       const outcome = isUrl ? (rel.id === defId ? "redirect removed" : `${vs[0].url} now redirects to ${rel.url}`) : `${rel.key} is the page default`;
       S.log(e, `${recording ? "Recorded" : "Stopped the experiment and recorded"} “${RESULT_LABEL[result]}”; ${outcome}`);
+      S.notifyOwner(e, `experiment ${recording ? "result recorded" : "stopped"}: ${RESULT_LABEL[result]}`);
       S.save();
       closeModal();
       toast(e.imported ? "Result recorded" : isUrl ? (rel.id === defId ? "Stopped. Everyone sees the original page." : `Stopped. ${vs[0].url} now redirects to ${rel.url}`) : `${rel.key} is now the default for ${p.name}`, "good");
