@@ -1,3 +1,4 @@
+import { BUILT_IN_DEFS } from "./metric-catalog.js";
 // App state: pages, variants, metrics, experiments. Persisted in localStorage.
 import { DAY, uid, hash, rng, startOfDay } from "./util.js";
 
@@ -44,8 +45,11 @@ function seed(now) {
     { id: "m_cta", name: "CTA click", group: "Clicks", desc: "Primary call to action", type: "binomial", base: 0.09 },
     { id: "m_scroll", name: "Scroll to Fee section", group: "Engagement", desc: "Section comes into view", type: "binomial", base: 0.45 },
     { id: "m_bounce", name: "Bounce rate", group: "Engagement", desc: "Single-page sessions", type: "binomial", base: 0.48, higherIsBetter: false, guardrailCutoff: 0.03 },
+    { id: "m_v2l", name: "V2L (visit to lead)", group: "Lead forms", desc: "Leads ÷ visits", type: "binomial", base: 0.057, requires: "leadForm" },
+    { id: "m_l2p", name: "L2P (lead to payment)", group: "Payments", desc: "Payments ÷ leads", type: "binomial", base: 0.0765, windowHours: 168, requires: "leadForm" },
     { id: "m_lcp", name: "Page load (LCP, p75)", group: "Performance", desc: "From Core Web Vitals, seconds", type: "mean", base: 2.1, sd: 0.8, unit: "s", higherIsBetter: false, guardrailCutoff: 0.05 },
   ];
+  metrics.forEach((m) => { if (BUILT_IN_DEFS[m.id]) m.def = structuredClone(BUILT_IN_DEFS[m.id]); });
   metrics.forEach((m) => Object.assign(m, { windowHours: 72, minSample: 100, maxChange: 0.5, targetMde: 0.1, tags: [], ...m }));
 
   const ids = (p, keys) => keys.map((k) => p.variants.find((x) => x.key === k).id);
@@ -154,6 +158,16 @@ export function load() {
   if (!state || state.v !== 2) state = seed(Date.now());
   state.settings = { ...DEFAULT_SETTINGS, ...state.settings };
   addUrlSample();
+  // Metric definitions (what each metric counts), also for data saved before they existed.
+  (state.metrics || []).forEach((m) => { if (!m.def && BUILT_IN_DEFS[m.id]) m.def = structuredClone(BUILT_IN_DEFS[m.id]); });
+  if (!state.ratioMetricsAdded) {
+    state.ratioMetricsAdded = true;
+    const add = [
+      { id: "m_v2l", name: "V2L (visit to lead)", group: "Lead forms", desc: "Leads ÷ visits", type: "binomial", base: 0.057, requires: "leadForm" },
+      { id: "m_l2p", name: "L2P (lead to payment)", group: "Payments", desc: "Payments ÷ leads", type: "binomial", base: 0.0765, windowHours: 168, requires: "leadForm" },
+    ];
+    add.forEach((m) => { if (!state.metrics.some((x) => x.id === m.id)) state.metrics.splice(state.metrics.length - 1, 0, { ...m, def: structuredClone(BUILT_IN_DEFS[m.id]) }); });
+  }
   // The sample "Ticket" custom field was removed; drop it from data saved before that.
   state.customFields = (state.customFields || []).filter((f) => f.id !== "cf_ticket");
   // The free-text "Traffic source" targeting field was removed; UTM rules live in attribute conditions.

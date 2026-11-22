@@ -1,7 +1,8 @@
 import * as S from "../store.js";
 import { acts } from "../actions.js";
 import { icon, openModal, closeModal, confirmModal } from "../ui.js";
-import { esc, fmtPct, fmtDate, toast, uid } from "../util.js";
+import { esc, fmtPct, fmtDate, toast, uid, rng, hash } from "../util.js";
+import * as C from "../metric-catalog.js";
 
 export function renderMetrics() {
   const st = S.get();
@@ -10,7 +11,7 @@ export function renderMetrics() {
     <button type="button" class="btn primary lg" data-act="metric-new" ${S.canEdit() ? "" : "disabled"}>${icon.plus()} New metric</button></div>
   <div class="card"><div class="table-wrap"><table class="t" style="min-width:860px"><thead><tr><th>Metric</th><th>Group</th><th>Type</th><th>Goal</th><th>Window</th><th class="num">Used in</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
   ${st.metrics.map((m) => `<tr><td><a class="exp-name" href="#/metric/${m.id}">${esc(m.name)}</a><div class="small" style="margin:2px 0 0">${esc(m.desc || "")}${m.requires === "leadForm" ? " · needs a page with a lead form" : ""}</div></td><td>${esc(m.group)}</td>
-    <td>${m.type === "binomial" ? `Conversion · baseline ${fmtPct(m.base, 1)}` : `Average · baseline ${m.base}${m.unit || ""}`}</td><td>${m.higherIsBetter === false ? "Lower is better" : "Higher is better"}</td><td>${m.windowHours ? `${m.windowHours >= 48 ? `${Math.round(m.windowHours / 24)} days` : `${m.windowHours}h`}` : "No limit"}</td>
+    <td>${esc(C.kindLabel(m))}<div class="small" style="margin:2px 0 0">${esc(C.countsLabel(m))}${C.countsLabel(m) ? " · " : ""}baseline ${m.type === "binomial" ? fmtPct(m.base, m.base < 0.1 ? 2 : 1) : `${m.unit === "₹" ? "₹" + Math.round(m.base).toLocaleString("en-IN") : m.base + (m.unit || "")}`}</div></td><td>${m.higherIsBetter === false ? "Lower is better" : "Higher is better"}</td><td>${m.windowHours ? `${m.windowHours >= 48 ? `${Math.round(m.windowHours / 24)} days` : `${m.windowHours}h`}` : "No limit"}</td>
     <td class="num">${used(m.id)} experiment${used(m.id) === 1 ? "" : "s"}</td>
     <td><div class="actions"><button type="button" class="btn xs" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>Edit</button>${m.custom && S.canEdit() ? `<button type="button" class="btn xs" data-act="metric-delete" data-mid="${m.id}" ${used(m.id) ? 'disabled title="In use by an experiment"' : ""}>Delete</button>` : ""}</div></td></tr>`).join("")}
   </tbody></table></div></div>`;
@@ -24,7 +25,8 @@ export function renderMetric(id) {
   return `<div class="crumbs"><a href="#/metrics">Metrics</a></div>
     <div class="page-head"><div><h1 style="font-size:28px">${esc(m.name)}</h1><div class="sub">${esc(m.desc || "")}</div></div><button type="button" class="btn sm" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>${icon.edit()} Edit</button></div>
     <div class="grid2"><section class="card pad"><h2>Definition</h2><dl class="kv">
-      <dt>Type</dt><dd>${m.type === "binomial" ? "Conversion (did the visitor do it?)" : `Average value${m.unit ? ` in ${esc(m.unit)}` : ""}`}</dd>
+      <dt>Type</dt><dd>${esc(C.kindLabel(m))}</dd>
+      ${m.def ? `<dt>Counts</dt><dd>${esc(C.countsLabel(m))}</dd>` : ""}
       <dt>Group</dt><dd>${esc(m.group)}</dd><dt>Goal</dt><dd>${m.higherIsBetter === false ? "Lower is better" : "Higher is better"}</dd>
       <dt>Baseline</dt><dd>${m.type === "binomial" ? fmtPct(m.base, 2) : `${m.base}${m.unit || ""}`} <span class="faint">(used for planning)</span></dd>
       <dt>Conversion window</dt><dd>${m.windowHours ? `Within ${m.windowHours} hours of first exposure` : "Any time during the experiment"}</dd>
@@ -36,38 +38,171 @@ export function renderMetric(id) {
       ${exps.length ? exps.map((e) => `<tr><td><a href="#/experiment/${e.id}/results">${esc(e.name)}</a></td><td>${e.primaryMetric === m.id ? "Primary" : e.guardrailMetrics.includes(m.id) ? "Guardrail" : e.activationMetric === m.id ? "Activation" : "Secondary"}</td><td>${esc(e.archived ? "archived" : e.status)}</td></tr>`).join("") : `<tr><td colspan="3" class="faint">Not used yet</td></tr>`}</tbody></table></div></section></div>`;
 }
 
+// New / edit metric: name, single event or ratio, the event(s); smart defaults
+// under More options; live preview of the last 28 days on the right.
 function metricModal(m) {
   const isNew = !m;
-  m = m || { name: "", group: S.METRIC_GROUPS[0], desc: "", type: "binomial", base: 0.05, higherIsBetter: true, windowHours: 72, minSample: 100, maxChange: 0.5, targetMde: 0.1, unit: "" };
+  const TEMPLATES = {
+    v2p: { label: "V2P", name: "V2P (visit to payment)", def: { kind: "ratio", num: C.ref("pay:payment_success"), den: C.ref("site:session_start") } },
+    ctr: { label: "Enroll click-through", name: "Enroll CTA click-through", def: { kind: "ratio", num: C.ref("site:cta_click", "cta_id", "enroll_now"), den: C.ref("site:session_start") } },
+    wa: { label: "WhatsApp chat", name: "WhatsApp chat started", def: { kind: "single", ev: C.ref("site:contact_click", "channel", "whatsapp"), measure: "count" } },
+    pay: { label: "Payment amount", name: "Payment amount per visitor", def: { kind: "single", ev: C.ref("pay:payment_success"), measure: "mean" } },
+  };
+  const blankDef = () => ({ kind: "single", ev: C.ref("lead:form_submit"), measure: "count", num: C.ref("lead:form_submit"), den: C.ref("site:session_start") });
+  const st = {
+    name: m?.name || "",
+    desc: m?.desc || "",
+    def: m?.def ? { ...blankDef(), ...structuredClone(m.def) } : blankDef(),
+    more: m ? { group: m.group, window: m.windowHours ?? 72, lower: m.higherIsBetter === false, minSample: m.minSample ?? 100, maxChange: m.maxChange ?? 0.5, guardCut: m.guardrailCutoff ?? 0.02 } : {},
+    isNew: false, moreOpen: !isNew, active: "",
+  };
+  if (st.def.kind === "single" && !st.def.ev) st.def.ev = C.ref("lead:form_submit");
+  const lockKind = !isNew;
+  const lead = () => (st.def.kind === "ratio" ? st.def.num : st.def.ev);
+  const auto = () => { const src = C.srcOf(lead()), e = C.evOf(lead()); return { group: e?.group || src?.group || "Clicks", window: src?.window || (st.def.kind === "ratio" && C.srcOf(st.def.den)?.window) || 72, lower: !!(src?.lower || e?.lower), minSample: 100, maxChange: 0.5, guardCut: 0.02 }; };
+  const setting = (k) => (st.more[k] !== undefined ? st.more[k] : auto()[k]);
+  const measure = () => { const e = C.evOf(st.def.ev); if (C.srcOf(st.def.ev)?.averageOnly) return "mean"; return e?.value ? st.def.measure || "count" : "count"; };
+  const evalNow = () => C.evaluate({ ...st.def, measure: measure() });
+  const fmtBase = (r) => {
+    if (r.ratio) return { big: r.has ? fmtPct(r.base, r.base < 0.1 ? 2 : 1) : "—", note: "", small: r.has ? `${Math.round(r.nTot).toLocaleString("en-IN")} ÷ ${Math.round(r.dTot).toLocaleString("en-IN")} in 28 days` : "" };
+    if (r.type === "mean") { const f = (x) => (r.unit === "₹" ? `₹${Math.round(x).toLocaleString("en-IN")}` : `${Math.round(x * 100) / 100}${r.unit}`); return { big: f(r.base), note: "per visitor" + (r.perEvent !== r.base ? ` · ${f(r.perEvent)} per payment` : ""), small: `${Math.round(r.total).toLocaleString("en-IN")} events in 28 days` }; }
+    return { big: r.has ? fmtPct(r.base, r.base < 0.1 ? 2 : 1) : "—", note: "of visitors", small: `${Math.round(r.total).toLocaleString("en-IN")} events in 28 days` };
+  };
+  const sentence = () => {
+    const win = setting("window") ? `within ${setting("window")} h of first seeing the test` : "any time during the test";
+    const dir = setting("lower") ? " Lower is better." : "";
+    if (st.def.kind === "ratio") return `<b>${esc(C.nameOf(st.def.num))}</b> ÷ <b>${esc(C.nameOf(st.def.den))}</b> per visitor, ${win}.${dir}`;
+    if (measure() === "mean") return `Average <b>${esc(Object.keys(C.evOf(st.def.ev).value)[0])}</b> from <b>${esc(C.nameOf(st.def.ev))}</b> per visitor, ${win}.${dir}`;
+    return `Share of visitors with at least one <b>${esc(C.nameOf(st.def.ev))}</b>, ${win}.${dir}`;
+  };
+  const problems = (r) => {
+    const p = [];
+    const nm = st.name.trim().toLowerCase();
+    if (!nm) p.push("add a name");
+    else if (S.get().metrics.some((x) => x !== m && x.name.toLowerCase() === nm)) p.push("that name is taken");
+    if (st.def.kind === "ratio") {
+      if (JSON.stringify(st.def.num) === JSON.stringify(st.def.den)) p.push("pick two different events");
+      else if (!C.cpvOf(st.def.den)) p.push("the “divided by” event has no data");
+      else if (!C.cpvOf(st.def.num) && !st.isNew) p.push("the event has no data in 28 days");
+    } else if (!r.has && !st.isNew) p.push("this event has no data in 28 days");
+    return p;
+  };
+  const spark = (r) => {
+    const rnd = rng(hash(JSON.stringify(st.def)));
+    const vals = Array.from({ length: 28 }, (_, i) => ((i % 7 === 5 || i % 7 === 6) ? 0.78 : 1.06) * (1 + (rnd() - 0.5) * 0.16));
+    const W = 300, H = 52, max = Math.max(...vals), bw = W / vals.length;
+    return `<svg viewBox="0 0 ${W} ${H}" class="mm-spark" role="img" aria-label="Last 28 days">${vals.map((v, i) => { const h = (v / max) * (H - 4); return `<rect x="${i * bw + 1}" y="${H - h}" width="${bw - 2}" height="${h}" rx="1.5"/>`; }).join("")}</svg>`;
+  };
+  const eventSelect = (id, cur) => `<select id="${id}" class="inp" data-mm="${id}">${Object.entries(C.SOURCES).filter(([, src]) => !(src.averageOnly && st.def.kind === "ratio")).map(([k, src]) => `<optgroup label="${esc(src.label)}">${Object.entries(src.events).map(([e, ev]) => `<option value="${k}:${e}" ${`${k}:${e}` === cur ? "selected" : ""}>${esc(ev.label)}${ev.cpv ? "" : " · no data yet"}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  const refFor = (w) => (w === "ev" ? st.def.ev : w === "num" ? st.def.num : st.def.den);
+  const filterRow = (w) => {
+    const r = refFor(w), e = C.evOf(r), props = Object.keys(e?.props || {});
+    if (!props.length) return "";
+    if (!r.prop) return `<button type="button" class="link-btn mm-addf" data-mm-addf="${w}">+ Add filter</button>`;
+    return `<div class="mm-filter"><span>where</span><select class="inp" data-mm="${w}-prop" aria-label="Property">${props.map((x) => `<option ${x === r.prop ? "selected" : ""}>${x}</option>`).join("")}</select><span>is</span><select class="inp" data-mm="${w}-val" aria-label="Value">${Object.keys(e.props[r.prop]).map((x) => `<option ${x === r.val ? "selected" : ""}>${x}</option>`).join("")}</select><button type="button" class="btn xs ghost" data-mm-rmf="${w}" aria-label="Remove filter">${icon.x(14)}</button></div>`;
+  };
+  const seg = (attr, items, cur, disabled) => `<div class="mm-seg" role="radiogroup">${items.map(([v, l]) => `<button type="button" ${attr}="${v}" class="${v === cur ? "on" : ""}" ${disabled ? "disabled" : ""}>${esc(l)}</button>`).join("")}</div>`;
+  const body = () => {
+    const r = evalNow(), b = fmtBase(r), probs = problems(r), ratio = st.def.kind === "ratio";
+    const e = !ratio ? C.evOf(st.def.ev) : null;
+    return `<div class="mm">
+      ${isNew ? `<div class="mm-tpl"><span>Start from</span>${Object.entries(TEMPLATES).map(([k, t]) => `<button type="button" class="${st.active === k ? "on" : ""}" data-mm-tpl="${k}">${esc(t.label)}</button>`).join("")}</div>` : ""}
+      <div class="mm-grid"><div class="mm-form">
+        <div class="field"><label for="mm-name">Name</label><input id="mm-name" class="inp" value="${esc(st.name)}" placeholder="e.g. V2L (visit to lead)" autocomplete="off"></div>
+        <div class="field"><span class="label">What to measure</span>${seg("data-mm-kind", [["single", "Single event"], ["ratio", "Ratio"]], st.def.kind, lockKind)}${lockKind ? `<div class="hint">Locked after the first save.</div>` : ""}</div>
+        ${ratio
+          ? `<div class="field"><label for="mm-num">Count</label>${eventSelect("mm-num", st.def.num.key)}${filterRow("num")}</div><div class="mm-div">÷</div><div class="field"><label for="mm-den">Divided by</label>${eventSelect("mm-den", st.def.den.key)}${filterRow("den")}</div>`
+          : `<div class="field"><label for="mm-ev">Event</label>${eventSelect("mm-ev", st.def.ev.key)}${filterRow("ev")}</div>${e?.value && !C.srcOf(st.def.ev).averageOnly ? `<div class="field"><span class="label">Count as</span>${seg("data-mm-measure", [["count", "% of visitors who did it"], ["mean", `Average ${Object.keys(e.value)[0]} per visitor`]], measure())}</div>` : ""}`}
+        <details class="adv mm-more" ${st.moreOpen ? "open" : ""}><summary>More options <span class="opt">· ${esc(setting("group"))} · ${setting("window")} h window${setting("lower") ? " · lower is better" : ""}</span></summary>
+          <div class="mm-more-grid">
+            <div class="field"><label for="mm-group">Group</label><select id="mm-group" class="inp" data-mm="group">${S.METRIC_GROUPS.map((g) => `<option ${g === setting("group") ? "selected" : ""}>${g}</option>`).join("")}</select></div>
+            <div class="field"><label for="mm-window">Window (hours)</label><input id="mm-window" class="inp" type="number" min="0" max="720" data-mm="window" value="${setting("window")}"></div>
+            <div class="field"><label for="mm-dir">Direction</label><select id="mm-dir" class="inp" data-mm="lower"><option value="0" ${!setting("lower") ? "selected" : ""}>Higher is better</option><option value="1" ${setting("lower") ? "selected" : ""}>Lower is better</option></select></div>
+            <div class="field"><label for="mm-min">Minimum data</label><input id="mm-min" class="inp" type="number" min="0" data-mm="minSample" value="${setting("minSample")}"></div>
+            <div class="field"><label for="mm-flag">Flag changes above (%)</label><input id="mm-flag" class="inp" type="number" min="1" data-mm="maxChange" value="${Math.round(setting("maxChange") * 100)}"></div>
+            <div class="field"><label for="mm-gc">Default guardrail cutoff (%)</label><input id="mm-gc" class="inp" type="number" min="0" step="0.5" data-mm="guardCut" value="${Math.round(setting("guardCut") * 1000) / 10}"></div>
+          </div>
+          <div class="field"><label for="mm-desc">Description <span class="opt">· optional</span></label><input id="mm-desc" class="inp" value="${esc(st.desc)}" placeholder="How to read it"></div>
+          ${!r.has ? `<label class="check"><input type="checkbox" data-mm="isNew" ${st.isNew ? "checked" : ""}><span><span class="t1">New event, not live yet</span><span class="t2">Save without data; the baseline is set once data arrives</span></span></label>` : ""}
+        </details>
+      </div>
+      <aside class="mm-card"><div class="eyebrow">Last 28 days</div>
+        ${r.has ? `<div class="mm-big">${b.big}${b.note ? `<span>${esc(b.note)}</span>` : ""}</div>${spark(r)}<div class="mm-small">${b.small}</div>` : `<div class="mm-empty">No data in the last 28 days.</div>`}
+        <p class="mm-def">${sentence()}</p>
+        <div class="mm-why" data-mm-why>${probs.length ? `To save: ${probs.map(esc).join(", ")}` : `<span class="ok">Ready to save</span>`}</div>
+      </aside></div></div>`;
+  };
+  const save = () => {
+    const r = evalNow();
+    if (problems(r).length) return;
+    const def = st.def.kind === "ratio" ? { kind: "ratio", num: st.def.num, den: st.def.den } : { kind: "single", ev: st.def.ev, measure: measure() };
+    const usesLead = [def.ev, def.num, def.den].some((x) => x && x.key.startsWith("lead:"));
+    const rec = {
+      name: st.name.trim(), desc: st.desc.trim(), group: setting("group"), def,
+      type: r.type, base: r.has ? Math.max(0.0001, r.base) : (r.type === "binomial" ? 0.05 : 1), ...(r.type === "mean" ? { sd: r.sd || Math.max(0.0001, r.base) * 0.4, unit: r.unit || "" } : {}),
+      higherIsBetter: !setting("lower"), windowHours: setting("window"), minSample: setting("minSample"), maxChange: Math.max(0.01, setting("maxChange")), guardrailCutoff: Math.max(0, setting("guardCut")),
+      ...(usesLead ? { requires: "leadForm" } : {}),
+    };
+    if (isNew) S.get().metrics.push({ id: uid("m"), custom: true, tags: [], targetMde: 0.1, ...rec });
+    else { if (!usesLead) delete m.requires; Object.assign(m, rec); }
+    S.save();
+    closeModal();
+    toast(isNew ? `Created ${rec.name}` : "Metric saved. Results recalculate.", "good");
+  };
   openModal({
     title: isNew ? "New metric" : `Edit ${m.name}`,
     wide: true,
-    body: `<div class="field"><label for="mn">Metric name</label><input id="mn" name="name" class="inp" value="${esc(m.name)}" placeholder="e.g. WhatsApp chat started"><div data-err="name"></div></div>
-      <div class="field"><label for="md">Description <span class="opt">· optional</span></label><input id="md" name="desc" class="inp" value="${esc(m.desc || "")}" placeholder="Custom event: whatsapp_click"></div>
-      <div class="row"><div class="grow field"><label for="mg">Group</label><select id="mg" name="group" class="inp">${S.METRIC_GROUPS.map((g) => `<option ${g === m.group ? "selected" : ""}>${g}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="mt">Type</label><select id="mt" name="type" class="inp" ${isNew ? "" : "disabled"}><option value="binomial" ${m.type === "binomial" ? "selected" : ""}>Conversion (yes / no)</option><option value="mean" ${m.type === "mean" ? "selected" : ""}>Average value</option></select>${isNew ? "" : `<div class="hint">Type can't change once created.</div>`}</div></div>
-      <div class="row"><div class="grow field"><label for="mb">Expected baseline ${m.type === "binomial" ? "rate (%)" : "value"}</label><input id="mb" name="base" type="number" class="inp" step="any" min="0" value="${m.type === "binomial" ? +(m.base * 100).toFixed(3) : m.base}"></div>
-        <div class="grow field"><label for="mw">Conversion window (hours)</label><input id="mw" name="window" type="number" class="inp" min="0" value="${m.windowHours ?? 72}"><div class="hint">0 = any time during the test</div></div></div>
-      <div class="row"><div class="grow field"><label for="ms">Minimum data before results</label><input id="ms" name="minSample" type="number" class="inp" min="0" value="${m.minSample ?? 100}"></div>
-        <div class="grow field"><label for="mx">Flag changes above</label><div class="pct-input"><input id="mx" name="maxChange" type="number" class="inp" min="1" value="${Math.round((m.maxChange ?? 0.5) * 100)}"><span>%</span></div></div>
-        <div class="grow field"><label for="mg">Default guardrail cutoff</label><div class="pct-input"><input id="mg" name="guardCut" type="number" class="inp" min="0" max="100" step="0.5" value="${Math.round((m.guardrailCutoff ?? 0.02) * 1000) / 10}"><span>%</span></div><div class="hint">Suggested when this metric is added as a guardrail; each experiment sets its own</div></div>
-        <div class="grow field"><label for="mm">Planning lift</label><div class="pct-input"><input id="mm" name="mde" type="number" class="inp" min="1" value="${Math.round((m.targetMde ?? 0.1) * 100)}"><span>%</span></div></div></div>
-      <label class="check"><input type="checkbox" name="lower" ${m.higherIsBetter === false ? "checked" : ""}><span><span class="t1">Lower is better</span><span class="t2">For metrics like bounce rate or load time, where a drop is good</span></span></label>`,
-    footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">${isNew ? "Create metric" : "Save"}</button>`,
-    onSubmit: (fd, form) => {
-      const name = String(fd.get("name")).trim();
-      const err = !name ? "Enter a name" : S.get().metrics.some((x) => x !== m && x.name.toLowerCase() === name.toLowerCase()) ? "A metric with this name already exists" : "";
-      if (err) return (form.querySelector("[data-err]").innerHTML = `<div class="err">${icon.warn(14)} ${esc(err)}</div>`);
-      const type = isNew ? fd.get("type") : m.type;
-      const base = Number(fd.get("base"));
-      const rec = { name, group: fd.get("group"), desc: String(fd.get("desc")).trim(), type, base: type === "binomial" ? Math.max(0.0001, Math.min(0.95, base / 100)) : Math.max(0.0001, base), higherIsBetter: !fd.get("lower"),
-        windowHours: Number(fd.get("window")) || 0, minSample: Number(fd.get("minSample")) || 0, maxChange: Math.max(0.01, Number(fd.get("maxChange")) / 100), guardrailCutoff: Math.max(0, Number(fd.get("guardCut")) || 0) / 100, targetMde: Math.max(0.01, Number(fd.get("mde")) / 100) };
-      if (isNew) S.get().metrics.push({ id: uid("m"), custom: true, tags: [], ...(type === "mean" ? { sd: rec.base * 0.4 } : {}), ...rec });
-      else Object.assign(m, rec);
-      S.save();
-      closeModal();
-      toast(isNew ? `Created ${name}` : "Metric saved. Results recalculate.", "good");
+    body: body(),
+    footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary" data-mm-save>${isNew ? "Create metric" : "Save"}</button>`,
+    onOpen: (form) => {
+      form.classList.add("metric-modal");
+      const paint = () => {
+        const focusId = document.activeElement?.id;
+        form.querySelector(".modal-b").innerHTML = body();
+        const pr = problems(evalNow());
+        form.querySelector("[data-mm-save]").disabled = pr.length > 0;
+        if (focusId) form.querySelector(`#${focusId}`)?.focus();
+      };
+      const touch = () => { st.active = ""; };
+      form.querySelector("[data-mm-save]").disabled = problems(evalNow()).length > 0;
+      form.addEventListener("click", (ev) => {
+        const t = (q) => ev.target.closest(q);
+        let b;
+        if ((b = t("[data-mm-tpl]"))) { const tp = TEMPLATES[b.dataset.mmTpl]; st.active = b.dataset.mmTpl; st.name = tp.name; st.def = { ...blankDef(), ...structuredClone(tp.def) }; st.more = {}; return paint(); }
+        if ((b = t("[data-mm-kind]")) && !b.disabled) { st.def.kind = b.dataset.mmKind; if (st.def.kind === "ratio" && C.srcOf(st.def.num)?.averageOnly) st.def.num = C.ref("lead:form_submit"); touch(); return paint(); }
+        if ((b = t("[data-mm-measure]"))) { st.def.measure = b.dataset.mmMeasure; touch(); return paint(); }
+        if ((b = t("[data-mm-addf]"))) { const r = refFor(b.dataset.mmAddf), e = C.evOf(r), p0 = Object.keys(e.props)[0]; r.prop = p0; r.val = Object.keys(e.props[p0])[0]; touch(); return paint(); }
+        if ((b = t("[data-mm-rmf]"))) { const r = refFor(b.dataset.mmRmf); r.prop = ""; r.val = ""; touch(); return paint(); }
+      });
+      form.addEventListener("toggle", (ev) => { if (ev.target.matches?.(".mm-more")) st.moreOpen = ev.target.open; }, true);
+      form.addEventListener("change", (ev) => {
+        const el = ev.target, k = el.dataset.mm;
+        if (!k) return;
+        if (k === "mm-ev") st.def.ev = C.ref(el.value);
+        else if (k === "mm-num") st.def.num = C.ref(el.value);
+        else if (k === "mm-den") st.def.den = C.ref(el.value);
+        else if (/^(ev|num|den)-prop$/.test(k)) { const r = refFor(k.split("-")[0]); r.prop = el.value; r.val = Object.keys(C.evOf(r).props[el.value])[0]; }
+        else if (/^(ev|num|den)-val$/.test(k)) refFor(k.split("-")[0]).val = el.value;
+        else if (k === "group") st.more.group = el.value;
+        else if (k === "window") st.more.window = Math.max(0, Math.min(720, Number(el.value) || 0));
+        else if (k === "lower") st.more.lower = el.value === "1";
+        else if (k === "minSample") st.more.minSample = Math.max(0, Number(el.value) || 0);
+        else if (k === "maxChange") st.more.maxChange = Math.max(1, Number(el.value) || 50) / 100;
+        else if (k === "guardCut") st.more.guardCut = Math.max(0, Number(el.value) || 0) / 100;
+        else if (k === "isNew") st.isNew = el.checked;
+        touch();
+        paint();
+      });
+      form.addEventListener("input", (ev) => {
+        if (ev.target.id === "mm-name") st.name = ev.target.value;
+        else if (ev.target.id === "mm-desc") { st.desc = ev.target.value; return; }
+        else return;
+        const pr = problems(evalNow());
+        form.querySelector("[data-mm-why]").innerHTML = pr.length ? `To save: ${pr.map(esc).join(", ")}` : `<span class="ok">Ready to save</span>`;
+        form.querySelector("[data-mm-save]").disabled = pr.length > 0;
+      });
     },
+    onSubmit: () => save(),
   });
 }
 
