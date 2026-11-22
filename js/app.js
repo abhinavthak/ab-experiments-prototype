@@ -142,7 +142,12 @@ document.addEventListener("click", (ev) => {
   }
 });
 
+// An open dropdown list takes Escape for itself.
+const selectIsOpen = () => {
+  try { return !!document.querySelector("select:open"); } catch { return false; }
+};
 document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && selectIsOpen()) return;
   if (ev.key === "Escape") {
     if (isModalOpen()) closeModal();
     else closeMenus();

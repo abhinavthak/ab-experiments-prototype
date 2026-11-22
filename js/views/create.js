@@ -208,6 +208,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   let seen = 0;
   let keyTouched = false;
   let planOverride = false;
+  const completed = new Set(); // steps the user has passed with Next
   let dirty = false;
 
   const cutRows = () => d.guardrailMetrics.map((mid) => {
@@ -537,14 +538,19 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     const pe = powerEstimate(d);
     const row = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
     const fits = row && row.days <= d.stopAfterDays;
-    const checks = [
-      ["Name", !!d.name],
-      ["Page and variants", !!p && vs.length >= 2],
-      ["Targeting", true],
-      ["Primary metric", !!pm],
-      ["Plan fits the duration", !!fits],
+    const sum100 = Math.round(d.weights.reduce((a, b) => a + (Number(b) || 0), 0)) === 100;
+    const urlsSet = d.testKind !== "url" || (d.urlVariants || []).slice(1).every((v) => v.url);
+    const cutsOk = d.guardrailMetrics.every((m) => { const c = d.guardrailCutoffs?.[m] ?? S.metric(m)?.guardrailCutoff ?? 0.02; return c >= 0.005 && c <= 0.5; });
+    // One item per step: done only once the step was passed with Next AND it is still valid.
+    const items = [
+      ["Overview", !!d.name, "Add a name"],
+      ["Type & variants", !!p && p.status === "live" && vs.length >= 2 && sum100 && urlsSet, !p ? "Pick a page" : !sum100 ? "Split must add up to 100%" : "Add a variant"],
+      ["Targeting", d.coverage >= 1 && d.coverage <= 100, "Set a rollout between 1% and 100%"],
+      ["Metrics", !!pm && cutsOk, !pm ? "Choose a primary metric" : "Check guardrail cutoffs"],
+      ["Analysis plan", !!fits || planOverride, "Plan doesn't fit the duration"],
     ];
-    const done = checks.filter((c) => c[1]).length;
+    const state = (i, ok) => (completed.has(i) ? (ok ? "ok" : "warn") : i === step ? "now" : "todo");
+    const done = items.filter(([, ok], i) => state(i, ok) === "ok").length;
     return `<div class="wz-card">
       <div class="wz-eyebrow">Live preview</div>
       <div class="wz-title">${esc(d.name || "Untitled experiment")}</div>
@@ -554,8 +560,12 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       <div class="wz-sec"><div class="wz-h">Decides the winner</div>${pm ? `<div class="wz-metric">${esc(pm.name)}</div>` : `<div class="wz-empty">Choose a primary metric in step 4.</div>`}
         ${d.guardrailMetrics.length ? `<div class="wz-guards">${d.guardrailMetrics.map((m) => `<span class="wz-g">${esc(S.metric(m)?.name || m)} <b>≤ ${Math.round((d.guardrailCutoffs?.[m] ?? S.metric(m)?.guardrailCutoff ?? 0.02) * 1000) / 10}%</b></span>`).join("")}</div>` : ""}</div>
       <div class="wz-sec"><div class="wz-h">Duration</div>${!pe ? `<div class="wz-empty">Appears once a page and primary metric are set.</div>` : `<div class="wz-dur ${fits ? "ok" : "short"}"><b>${d.stopAfterDays / 7} week${d.stopAfterDays === 7 ? "" : "s"}</b> to detect a ${fmtPct(d.plannedMde, 0)} lift<div>${fits ? `Enough: needs about ${row.days} days` : `Too short: needs about ${row.days > 365 ? "a year+" : `${row.days} days`}`}</div></div>`}</div>
-      <div class="wz-ready"><div class="wz-rh"><span>Ready to create</span><b>${done} of ${checks.length}</b></div><div class="wz-meter"><i style="width:${(done / checks.length) * 100}%"></i></div>
-        <ul>${checks.map(([l, ok]) => `<li class="${ok ? "ok" : ""}"><span>${ok ? "✓" : ""}</span>${l}</li>`).join("")}</ul></div>
+      <div class="wz-ready"><div class="wz-rh"><span>Ready to create</span><b>${done} of ${items.length} steps</b></div><div class="wz-meter"><i style="width:${(done / items.length) * 100}%"></i></div>
+        <ul>${items.map(([l, ok, fix], i) => {
+          const stt = state(i, ok);
+          const note = stt === "warn" ? fix : stt === "now" ? "In progress" : stt === "todo" ? "" : "";
+          return `<li class="${stt}"><button type="button" data-goto="${i}" ${i <= seen ? "" : "disabled"}><span class="mk">${stt === "ok" ? "✓" : stt === "warn" ? "!" : ""}</span><span class="lb">${l}${note ? `<small>${esc(note)}</small>` : ""}</span></button></li>`;
+        }).join("")}</ul></div>
     </div>`;
   };
   const refreshSide = (form) => {
@@ -576,6 +586,13 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const later = () => { clearTimeout(tmr); tmr = setTimeout(() => refreshSide(form), 120); };
       form.addEventListener("input", later);
       form.addEventListener("change", later);
+      form.addEventListener("click", (ev) => {
+        const g = ev.target.closest("[data-side] [data-goto]");
+        if (!g || g.disabled) return;
+        collect(form);
+        step = Number(g.dataset.goto);
+        paint();
+      });
     }
     form.querySelector(".modal-f").innerHTML = footer();
     form.querySelector("#modal-title").textContent = d.name ? `New experiment · ${d.name}` : "New experiment";
@@ -749,6 +766,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     onSubmit: (fd, form, submitter) => {
       const errs = collect(form);
       if (showErrs(form, errs)) return;
+      completed.add(step);
       if (submitter?.value !== "create") {
         step++;
         seen = Math.max(seen, step);

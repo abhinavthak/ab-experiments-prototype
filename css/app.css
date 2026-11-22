@@ -513,10 +513,6 @@ fieldset.card[disabled] { opacity: .75; }
 .wz-meter { height: 6px; border-radius: 3px; background: var(--seg); margin: 8px 0 10px; overflow: hidden; }
 .wz-meter i { display: block; height: 100%; background: var(--green-dot); border-radius: 3px; transition: width .35s ease; }
 .wz-ready ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; color: var(--text-3); }
-.wz-ready li { display: flex; gap: 8px; align-items: center; }
-.wz-ready li span { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--text-4); display: inline-grid; place-items: center; font-size: 10px; flex: none; }
-.wz-ready li.ok { color: var(--text); }
-.wz-ready li.ok span { background: var(--green-dot); border-color: var(--green-dot); color: #fff; }
 @media (prefers-reduced-motion: reduce) { .wz-bar i, .wz-split i, .wz-meter i { transition: none; } }
 @media (max-width: 1340px) {
   .modal.wizard .modal-b { grid-template-columns: 232px minmax(0, 1fr) 320px; background: linear-gradient(to right, var(--card) 231px, var(--border) 231px, var(--border) 232px, var(--bg) 232px); }
@@ -701,7 +697,6 @@ pre.code { background: #111214; color: var(--text-2); border: 1px solid var(--bo
 .wz-dur.short { background: rgba(255,122,23,.08); color: var(--amber-fg); border: 1px solid rgba(255,122,23,.3); }
 .wz-ready { background: var(--head); border: 1px solid var(--border); border-radius: 8px; }
 .wz-meter { background: #26292e; }
-.wz-ready li.ok span { color: #0a0a0a; }
 .key-line .mono { color: var(--text-2); }
 .rv-split { border-radius: 999px; }
 .gchip { border-radius: 999px; }
@@ -711,3 +706,68 @@ pre.code { background: #111214; color: var(--text-2); border: 1px solid var(--bo
 .gchip.pending { background: transparent; color: var(--text-3); }
 .vlist button.v.on { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.5); }
 .proto-bar a { text-decoration: none; }
+
+/* ===== Dropdowns: flat, dark, no native gloss ===== */
+select.inp {
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+  padding-right: 40px; text-overflow: ellipsis;
+  background-color: var(--head);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237d8187' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 15px center; background-size: 12px 8px;
+}
+select.inp:hover:not(:disabled) { border-color: #3a3e44; }
+select.inp:disabled { cursor: not-allowed; }
+
+/* Browsers with customizable select: style the open list too */
+@supports (appearance: base-select) {
+  select.inp, select.inp::picker(select) { appearance: base-select; }
+  select.inp { display: flex; align-items: center; gap: 8px; background-image: none; padding-right: 14px; }
+  select.inp::picker-icon {
+    content: ""; width: 12px; height: 8px; margin-left: auto; flex: none;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237d8187' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center / 12px 8px;
+    transition: rotate .18s ease;
+  }
+  select.inp:open { border-color: rgba(255,255,255,.6); box-shadow: 0 0 0 3px rgba(255,255,255,.08); }
+  select.inp:open::picker-icon { rotate: 180deg; }
+  select.inp::picker(select) {
+    background: #141518; color: var(--text-2);
+    border: 1px solid #2c2f34; border-radius: 8px; padding: 6px;
+    margin-block: 6px; max-height: min(360px, 60vh); overflow-y: auto;
+    box-shadow: 0 18px 48px rgba(0,0,0,.65);
+    scrollbar-width: thin; scrollbar-color: #363a3f transparent;
+  }
+  select.inp option {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 6px; background: transparent;
+    font: 400 14px/1.4 var(--sans); color: var(--text-2); cursor: pointer;
+  }
+  select.inp option:hover, select.inp option:focus-visible { background: rgba(255,255,255,.06); color: #fff; outline: none; }
+  select.inp option:checked { background: rgba(255,255,255,.08); color: #fff; }
+  select.inp option::checkmark { content: "✓"; order: 1; margin-left: auto; color: #fff; font-size: 12px; }
+  select.inp option[value=""] { color: var(--text-3); }
+  select.inp option:disabled { color: var(--text-4); cursor: not-allowed; background: transparent; }
+  select.inp optgroup { display: block; background: transparent; padding: 8px 0 2px; margin: 0; border: 0;
+    font: 400 11px/1.4 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+  select.inp optgroup + optgroup { border-top: 1px solid var(--border); margin-top: 4px; }
+  select.inp optgroup > option { text-transform: none; letter-spacing: 0; }
+  select.inp optgroup::label, select.inp optgroup legend { display: block; padding: 4px 12px 6px; font: inherit; color: inherit; }
+}
+@media (prefers-reduced-motion: reduce) { select.inp::picker-icon { transition: none; } }
+
+/* Readiness: one row per step, clickable */
+.wz-ready ul { gap: 2px; }
+.wz-ready li { display: block; }
+.wz-ready li button { all: unset; box-sizing: border-box; display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 5px 6px; border-radius: 6px; cursor: pointer; color: var(--text-3); font-size: 13px; }
+.wz-ready li button:hover:not([disabled]) { background: rgba(255,255,255,.05); color: var(--text); }
+.wz-ready li button[disabled] { cursor: default; }
+.wz-ready li button:focus-visible { outline: 1px solid rgba(255,255,255,.5); }
+.wz-ready .mk { width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--text-4); display: inline-grid; place-items: center; font-size: 10px; flex: none; color: #0a0a0a; }
+.wz-ready .lb { display: flex; flex-direction: column; }
+.wz-ready .lb small { font-size: 12px; color: var(--text-3); }
+.wz-ready li.ok button { color: var(--text); }
+.wz-ready li.ok .mk { background: var(--green-dot); border-color: var(--green-dot); }
+.wz-ready li.now button { color: var(--text); }
+.wz-ready li.now .mk { border-color: #fff; box-shadow: inset 0 0 0 3px #141518, inset 0 0 0 8px #fff; }
+.wz-ready li.warn button { color: var(--text); }
+.wz-ready li.warn .mk { background: var(--amber-dot); border-color: var(--amber-dot); font-weight: 500; }
+.wz-ready li.warn small { color: var(--amber-fg); }
