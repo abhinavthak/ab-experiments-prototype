@@ -193,7 +193,7 @@ export function stopExperiment(e, { preset = null } = {}) {
       <div class="field" ${e.imported ? "hidden" : ""}><label for="st-default">${isUrl ? "Where visitors go after stopping" : "Page default after stopping"}</label>
         <select id="st-default" name="released" class="inp">${vs.map((v) => `<option value="${v.id}">${esc(v.key)} · ${esc(v.name)}${isUrl ? ` (${esc(v.url)})` : v.id === p.defaultVariantId ? " (current default)" : ""}</option>`).join("")}</select>
         <div class="hint" id="st-hint"></div></div>
-      <div class="field"><label for="st-sum">Conclusion <span class="opt">· what you learned, shown on Results and in Insights</span></label><textarea id="st-sum" name="summary" class="inp" placeholder="What happened, why you think so, and what to try next">${esc(e.analysisSummary || "")}</textarea></div>
+      <div class="field"><label for="st-sum">Conclusion <span class="opt">· what you learned, shown on Results and in reports</span></label><textarea id="st-sum" name="summary" class="inp" placeholder="What happened, why you think so, and what to try next">${esc(e.analysisSummary || "")}</textarea></div>
       ${callout("info", "A stopped test can't restart. Duplicate it to run again. Results stay readable.")}`,
     footer: `<button type="button" class="btn sm" data-act="modal-close">Cancel</button><button type="submit" class="btn sm primary">${recording ? "Save result" : "Stop experiment"}</button>`,
     onOpen: (form) => {

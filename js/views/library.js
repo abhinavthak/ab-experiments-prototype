@@ -1,4 +1,4 @@
-// Insights (dashboard, learnings, timeline, metric effects), holdouts,
+// Holdouts,
 // shareable reports.
 import * as S from "../store.js";
 import { acts, go } from "../actions.js";
@@ -7,100 +7,6 @@ import { icon, pill, avatar, variantChip, openModal, closeModal, confirmModal, e
 import { esc, fmtDate, fmtInt, fmtPct, fmtLift, DAY, toast, uid, copyText, startOfDay } from "../util.js";
 import { resultsBody, bindResults, defaultRes } from "./detail.js";
 import { RESULT_LABEL } from "../store.js";
-
-/* ---------- Insights ---------- */
-let itab = "dashboard";
-let imetric = "m_lead";
-let irange = 180;
-
-function primaryLift(e) {
-  if (!S.phasesOf(e).length || !e.primaryMetric) return null;
-  const a = analyze(e);
-  const w = e.winnerVariantId ? a.primary?.rows.find((r) => r.v.id === e.winnerVariantId) : a.primary?.rows.slice(1).filter((r) => r.r).sort((x, y) => y.r.lift - x.r.lift)[0];
-  return w?.r ? { v: w.v, lift: w.r.lift, verdict: w.verdict } : null;
-}
-
-export function renderInsights() {
-  const st = S.get();
-  const now = S.now();
-  const exps = st.experiments.filter((e) => !e.virtualVariants);
-  const inRange = (e) => (e.startedAt ?? e.createdAt) >= now - irange * DAY;
-  const tabs = [["dashboard", "Dashboard"], ["learnings", "Learnings"], ["timeline", "Timeline"], ["effects", "Metric effects"]];
-  let body = "";
-  if (itab === "dashboard") {
-    const started = exps.filter((e) => e.startedAt && inRange(e));
-    const concluded = started.filter((e) => e.status === "stopped" && e.result);
-    const won = concluded.filter((e) => e.result === "won").length;
-    const lost = concluded.filter((e) => e.result === "lost").length;
-    const inc = concluded.filter((e) => e.result === "inconclusive" || e.result === "dnf").length;
-    const durs = started.filter((e) => e.endedAt).map((e) => (e.endedAt - e.startedAt) / DAY);
-    const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : 0;
-    const bar = (n, cls) => (concluded.length ? `<div class="seg-bar ${cls}" style="width:${(n / concluded.length) * 100}%" title="${n}"></div>` : "");
-    const byPage = st.pages.map((p) => {
-      const pe = started.filter((e) => e.pageId === p.id);
-      return { p, n: pe.length, won: pe.filter((e) => e.result === "won").length, running: pe.filter((e) => e.status === "running").length };
-    }).filter((x) => x.n);
-    body = `<div class="stats4">
-      <div class="card stat"><div class="k">Experiments run</div><div class="v">${started.length}</div><div class="s">Started in the last ${irange} days</div></div>
-      <div class="card stat"><div class="k">Win rate</div><div class="v">${concluded.length ? fmtPct(won / concluded.length, 0) : "—"}</div><div class="s">${won} of ${concluded.length} concluded</div></div>
-      <div class="card stat"><div class="k">Average length</div><div class="v">${durs.length ? `${Math.round(avg)} days` : "—"}</div><div class="s">Stopped experiments</div></div>
-      <div class="card stat"><div class="k">Running now</div><div class="v">${exps.filter((e) => e.status === "running" && !e.archived).length}</div><div class="s">${exps.filter((e) => e.status === "scheduled" && !e.archived).length} scheduled</div></div></div>
-    <section class="card pad"><h2>Results</h2><div class="card-sub">How concluded experiments ended.</div>
-      <div class="result-bar">${bar(won, "won")}${bar(lost, "lost")}${bar(inc, "neutral")}</div>
-      <div class="legend"><span><i style="background:var(--green-dot)"></i>Won ${won}</span><span><i style="background:var(--red-dot)"></i>Lost ${lost}</span><span><i style="background:#9CA3AF"></i>No clear winner / did not finish ${inc}</span></div></section>
-    <section class="card"><div class="toolbar"><b>By page</b></div><div class="table-wrap"><table class="t compact"><thead><tr><th>Page</th><th class="num">Experiments</th><th class="num">Running</th><th class="num">Winners shipped</th></tr></thead><tbody>
-      ${byPage.length ? byPage.map((x) => `<tr><td><a href="#/page/${x.p.id}">${esc(x.p.name)}</a></td><td class="num">${x.n}</td><td class="num">${x.running}</td><td class="num">${x.won}</td></tr>`).join("") : emptyRow(4, "No experiments in this range")}</tbody></table></div></section>`;
-  } else if (itab === "learnings") {
-    const done = exps.filter((e) => e.status === "stopped" && e.result && inRange(e)).sort((a, b) => b.endedAt - a.endedAt);
-    body = done.length ? done.map((e) => {
-      const l = primaryLift(e);
-      const tone = e.result === "won" ? "green" : e.result === "lost" ? "red" : "gray";
-      return `<section class="card pad learning"><div class="card-head"><div><div class="row" style="gap:10px">${pill(tone, RESULT_LABEL[e.result])}<a href="#/experiment/${e.id}/results"><h2 style="display:inline">${esc(e.name)}</h2></a></div>
-        <div class="card-sub">${esc(S.page(e.pageId)?.name || "")} · ${fmtDate(e.startedAt)} – ${fmtDate(e.endedAt)} · ${avatar(e.ownerId)} ${esc(S.user(e.ownerId).name)}</div></div>
-        ${l ? `<div class="num"><div class="eyebrow">${esc(S.metric(e.primaryMetric)?.name)}</div><b class="${l.lift > 0 ? "up" : "down"}" style="font-size:20px">${esc(l.v.key)} ${fmtLift(l.lift)}</b></div>` : ""}</div>
-        ${e.hypothesis ? `<p style="margin:8px 0"><b>Hypothesis:</b> ${esc(e.hypothesis)}</p>` : ""}
-        ${e.analysisSummary ? `<p style="margin:8px 0;white-space:pre-wrap"><b>What we learned:</b> ${esc(e.analysisSummary)}</p>` : `<p class="faint" style="margin:8px 0">No conclusion written. <a href="#/experiment/${e.id}/results">Add one</a></p>`}
-        <div class="row" style="gap:6px">${e.tags.map((t) => `<span class="badge">${esc(t)}</span>`).join("")}</div></section>`;
-    }).join("") : `<div class="card"><div class="empty"><h3>No concluded experiments yet</h3><div>When you stop an experiment and record a result, it shows up here with its conclusion.</div></div></div>`;
-  } else if (itab === "timeline") {
-    const items = exps.filter((e) => (e.startedAt || e.scheduledStart) && !e.archived || (e.archived && e.startedAt)).filter((e) => (e.endedAt ?? now) >= now - irange * DAY);
-    const t0 = startOfDay(now - irange * DAY);
-    const t1 = startOfDay(now + 21 * DAY);
-    const x = (t) => ((Math.max(t0, Math.min(t1, t)) - t0) / (t1 - t0)) * 100;
-    const months = [];
-    for (let d = new Date(t0); d.getTime() < t1; d.setMonth(d.getMonth() + 1, 1)) months.push(d.getTime());
-    const groups = st.pages.map((p) => ({ p, list: items.filter((e) => e.pageId === p.id).sort((a, b) => (a.startedAt ?? a.scheduledStart) - (b.startedAt ?? b.scheduledStart)) })).filter((g) => g.list.length);
-    body = `<section class="card pad"><h2>Timeline</h2><div class="card-sub">When each experiment ran, by page. Overlaps on a page can't happen; overlaps across pages are fine.</div>
-      <div class="gantt"><div class="gantt-axis">${months.map((m) => `<span style="left:${x(m)}%">${esc(fmtDate(m).replace(/ \d+,/, ""))}</span>`).join("")}<span class="today" style="left:${x(now)}%">Today</span></div>
-      ${groups.map((g) => `<div class="gantt-group">${esc(g.p.name)}</div>${g.list.map((e) => {
-        const s = e.startedAt ?? e.scheduledStart;
-        const en = e.endedAt ?? (e.status === "scheduled" ? S.stopDate(e) ?? s + 14 * DAY : e.status === "running" ? S.stopDate(e) ?? now : now);
-        const st2 = statusPill(e);
-        return `<div class="gantt-row"><a class="gantt-label" href="#/experiment/${e.id}/overview" title="${esc(e.name)}">${esc(e.name)}</a><div class="gantt-track"><div class="gantt-bar ${st2.tone} ${e.status === "scheduled" ? "planned" : ""}" style="left:${x(s)}%;width:${Math.max(0.8, x(en) - x(s))}%" title="${esc(`${e.name}: ${fmtDate(s)} – ${fmtDate(en)} (${st2.label})`)}"></div>${e.status === "running" && en > now ? `<div class="gantt-bar planned ${st2.tone}" style="left:${x(now)}%;width:${Math.max(0, x(en) - x(now))}%"></div>` : ""}<div class="gantt-today" style="left:${x(now)}%"></div></div></div>`;
-      }).join("")}`).join("") || `<div class="faint">No experiments in this range</div>`}</div></section>`;
-  } else {
-    const m = S.metric(imetric) || st.metrics[0];
-    const using = exps.filter((e) => S.phasesOf(e).length && [e.primaryMetric, ...e.secondaryMetrics, ...e.guardrailMetrics].includes(m.id) && inRange(e));
-    body = `<section class="card"><div class="toolbar"><div><b>Metric effects</b><div class="small" style="margin:2px 0 0">How every experiment moved one metric. Useful for seeing which kinds of change work.</div></div>
-      <div class="end"><label class="ctl"><span>Metric</span><select class="inp" data-imetric>${st.metrics.map((x) => `<option value="${x.id}" ${x.id === m.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></label></div></div>
-      <div class="table-wrap"><table class="t" style="min-width:760px"><thead><tr><th>Experiment</th><th>Role</th><th>Status</th><th>Variant</th><th class="num">Change vs Control</th><th>Verdict</th></tr></thead><tbody>
-      ${using.length ? using.flatMap((e) => {
-        const a = analyze(e);
-        const block = [a.primary, ...a.secondary, ...a.guardrails].find((b) => b?.metric.id === m.id);
-        if (!block) return [];
-        const role = e.primaryMetric === m.id ? "Primary" : e.guardrailMetrics.includes(m.id) ? "Guardrail" : "Secondary";
-        return block.rows.slice(1).map((r, i) => `<tr><td>${i === 0 ? `<a href="#/experiment/${e.id}/results">${esc(e.name)}</a>` : ""}</td><td>${i === 0 ? role : ""}</td><td>${i === 0 ? pill(statusPill(e).tone, statusPill(e).label) : ""}</td><td>${variantChip(r.v)} ${esc(r.v.name)}</td>
-          <td class="num">${r.r && r.enough ? `<b class="${r.verdict === "won" ? "up" : r.verdict === "lost" ? "down" : ""}">${fmtLift(r.r.lift)}</b>` : `<span class="faint">Not enough data</span>`}</td><td>${r.verdict === "won" ? `<span class="badge green">Better</span>` : r.verdict === "lost" ? `<span class="badge red">Worse</span>` : `<span class="faint">No clear change</span>`}</td></tr>`);
-      }).join("") : emptyRow(6, `No experiments measured ${m.name}`)}</tbody></table></div></section>`;
-  }
-  return `<div class="page-head"><div><h1>Insights</h1><div class="sub">What your experiments have taught you</div></div>
-    <label class="ctl"><span>Range</span><select class="inp" data-irange>${[[90, "Last 90 days"], [180, "Last 6 months"], [365, "Last 12 months"]].map(([k, l]) => `<option value="${k}" ${irange === k ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
-    <nav class="tabs" aria-label="Insights">${tabs.map(([k, l]) => `<a href="#/insights" data-act="ins-tab" data-tab="${k}" class="${itab === k ? "on" : ""}" ${itab === k ? 'aria-current="page"' : ""}>${l}</a>`).join("")}</nav>${body}`;
-}
-export function bindInsights(root, rr) {
-  root.querySelector("[data-imetric]")?.addEventListener("change", (ev) => { imetric = ev.target.value; rr(); });
-  root.querySelector("[data-irange]")?.addEventListener("change", (ev) => { irange = Number(ev.target.value); rr(); });
-}
 
 /* ---------- Holdouts ---------- */
 // A holdout keeps a slice of visitors on every page's default from the
@@ -189,7 +95,6 @@ export function bindReport(root, rr, id) {
 }
 
 Object.assign(acts, {
-  "ins-tab": (el, rr) => { itab = el.dataset.tab; rr(); },
   "rep-copy": () => copyText(location.href),
   "rep-edit": (el) => {
     const r = S.report(el.dataset.rid);

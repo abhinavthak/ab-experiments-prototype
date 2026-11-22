@@ -33,8 +33,7 @@ export function renderMetric(id) {
       <dt>Default guardrail cutoff</dt><dd>${fmtPct(m.guardrailCutoff ?? 0.02, 0)} worse; suggested when added as a guardrail, set per experiment</dd>
       <dt>Planning lift</dt><dd>${fmtPct(m.targetMde ?? 0.1, 0)}</dd></dl></section>
     <section class="card"><div class="toolbar"><b>Experiments using it</b></div><div class="table-wrap"><table class="t compact"><thead><tr><th>Experiment</th><th>Role</th><th>Status</th></tr></thead><tbody>
-      ${exps.length ? exps.map((e) => `<tr><td><a href="#/experiment/${e.id}/results">${esc(e.name)}</a></td><td>${e.primaryMetric === m.id ? "Primary" : e.guardrailMetrics.includes(m.id) ? "Guardrail" : e.activationMetric === m.id ? "Activation" : "Secondary"}</td><td>${esc(e.archived ? "archived" : e.status)}</td></tr>`).join("") : `<tr><td colspan="3" class="faint">Not used yet</td></tr>`}</tbody></table></div>
-      <div style="padding:12px 20px"><a class="btn xs" href="#/insights" data-act="nav" data-href="#/insights">See its effects in Insights</a></div></section></div>`;
+      ${exps.length ? exps.map((e) => `<tr><td><a href="#/experiment/${e.id}/results">${esc(e.name)}</a></td><td>${e.primaryMetric === m.id ? "Primary" : e.guardrailMetrics.includes(m.id) ? "Guardrail" : e.activationMetric === m.id ? "Activation" : "Secondary"}</td><td>${esc(e.archived ? "archived" : e.status)}</td></tr>`).join("") : `<tr><td colspan="3" class="faint">Not used yet</td></tr>`}</tbody></table></div></section></div>`;
 }
 
 function metricModal(m) {

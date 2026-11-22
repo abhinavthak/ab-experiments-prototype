@@ -26,7 +26,6 @@ function route() {
   if (a === "page" && b) return { nav: "pages", render: () => Pages.renderEditor({ id: b, query }), mount: () => Pages.onEditorMount({ id: b, query }), title: S.page(b)?.name };
   if (a === "metrics") return { nav: "metrics", render: Misc.renderMetrics, title: "Metrics" };
   if (a === "metric" && b) return { nav: "metrics", render: () => Misc.renderMetric(b), title: S.metric(b)?.name };
-  if (a === "insights") return { nav: "insights", render: Lib.renderInsights, bind: Lib.bindInsights, title: "Insights" };
   if (a === "holdouts") return { nav: "holdouts", render: Lib.renderHoldouts, title: "Holdouts" };
   if (a === "holdout" && b) return { nav: "holdouts", render: () => Lib.renderHoldout(b), bind: (r, rr) => Lib.bindHoldout(r, rr, b), title: S.holdout(b)?.name };
   if (a === "report" && b) return { nav: "experiments", render: () => Lib.renderReport(b), bind: (r, rr) => Lib.bindReport(r, rr, b), title: S.report(b)?.title };
@@ -37,7 +36,7 @@ function route() {
 
 const NAV = [
   ["WEBSITE", [["pages", "Pages", icon.page(), "#/pages"], ["", "Widget Blocks", icon.grid()], ["", "Widget Management", icon.layers()], ["", "Live Lectures", icon.screen()], ["", "File Bucket", icon.folder()]]],
-  ["GROWTH", [["experiments", "Experiments", icon.flask(), "#/experiments"], ["insights", "Insights", icon.pulse(), "#/insights"], ["holdouts", "Holdouts", icon.layers(), "#/holdouts"], ["metrics", "Metrics", icon.target(), "#/metrics"], ["audiences", "Audiences", icon.users(), "#/audiences"]]],
+  ["GROWTH", [["experiments", "Experiments", icon.flask(), "#/experiments"], ["holdouts", "Holdouts", icon.layers(), "#/holdouts"], ["metrics", "Metrics", icon.target(), "#/metrics"], ["audiences", "Audiences", icon.users(), "#/audiences"]]],
   ["LEADS", [["", "Lead Payments", icon.card()], ["", "MOOC Registrations", icon.cap()]]],
   ["LEAD FORMS", [["", "Form Builder", icon.form()], ["", "Custom Form", icon.form()]]],
   ["ADMIN", [["settings", "Settings", icon.gear(), "#/settings"], ["", "Users", icon.users()], ["", "Core Web Vitals", icon.pulse()]]],

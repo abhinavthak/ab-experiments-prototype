@@ -83,7 +83,6 @@ Everything runs in your browser. Changes are saved in this browser only (localSt
 
 **Health**: SRM, **multiple exposures**, enough-data check, guardrails, mid-test edits, traffic by dimension.
 
-**Insights**: dashboard (win rate, run time, by page), learnings, timeline, metric effects. **Holdouts**: hold out a share of visitors on chosen pages to measure the combined effect of shipped winners.
 
 **Metrics**: editable definition (type, baseline, conversion window, minimum data, suspicious-change threshold, planning lift, goal direction) and a metric page. **Settings**: interval level, win thresholds, correction, sequential tuning, CUPED/sequential defaults, minimum run time, SRM and multiple-exposure thresholds, guardrail rule, hypothesis requirement, assignment defaults, launch checklist, custom fields.
 
