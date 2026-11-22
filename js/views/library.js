@@ -47,7 +47,7 @@ export function renderInsights() {
       <div class="card stat"><div class="k">Running now</div><div class="v">${exps.filter((e) => e.status === "running" && !e.archived).length}</div><div class="s">${exps.filter((e) => e.status === "scheduled" && !e.archived).length} scheduled</div></div></div>
     <section class="card pad"><h2>Results</h2><div class="card-sub">How concluded experiments ended.</div>
       <div class="result-bar">${bar(won, "won")}${bar(lost, "lost")}${bar(inc, "neutral")}</div>
-      <div class="legend"><span><i style="background:var(--green, #16A34A)"></i>Won ${won}</span><span><i style="background:#DC2626"></i>Lost ${lost}</span><span><i style="background:#9CA3AF"></i>No clear winner / did not finish ${inc}</span></div></section>
+      <div class="legend"><span><i style="background:var(--green-dot)"></i>Won ${won}</span><span><i style="background:var(--red-dot)"></i>Lost ${lost}</span><span><i style="background:#9CA3AF"></i>No clear winner / did not finish ${inc}</span></div></section>
     <section class="card"><div class="toolbar"><b>By page</b></div><div class="table-wrap"><table class="t compact"><thead><tr><th>Page</th><th class="num">Experiments</th><th class="num">Running</th><th class="num">Winners shipped</th></tr></thead><tbody>
       ${byPage.length ? byPage.map((x) => `<tr><td><a href="#/page/${x.p.id}">${esc(x.p.name)}</a></td><td class="num">${x.n}</td><td class="num">${x.running}</td><td class="num">${x.won}</td></tr>`).join("") : emptyRow(4, "No experiments in this range")}</tbody></table></div></section>`;
   } else if (itab === "learnings") {

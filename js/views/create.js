@@ -727,7 +727,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     if (!dirty) return closeModal();
     const f = form.querySelector(".modal-f");
     const original = f.innerHTML;
-    f.innerHTML = `<span style="margin-right:auto;display:flex;gap:8px;align-items:center;color:#92400E">${icon.warn(16)} Discard this experiment? Your details won't be saved.</span>
+    f.innerHTML = `<span style="margin-right:auto;display:flex;gap:8px;align-items:center;color:var(--amber-fg)">${icon.warn(16)} Discard this experiment? Your details won't be saved.</span>
       <button type="button" class="btn sm" data-local="keep">Keep editing</button><button type="button" class="btn sm danger" data-act="modal-close">Discard</button>`;
     f.querySelector("[data-local=keep]").addEventListener("click", () => {
       f.innerHTML = original;

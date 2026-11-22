@@ -88,7 +88,8 @@ export function gauss(r) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
 }
 
-export const VARIANT_COLORS = ["#4B5563", "#2563EB", "#C2410C", "#7C3AED", "#0F766E"];
+// Variant colours from the design accents: A neutral, then breeze, sunset, twilight, sunset-soft.
+export const VARIANT_COLORS = ["#9a9ea5", "#a0c3ec", "#ff7a17", "#c4b5fd", "#ffc285"];
 export const letter = (i) => String.fromCharCode(65 + i);
 
 export const $ = (sel, root = document) => root.querySelector(sel);

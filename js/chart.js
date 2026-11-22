@@ -18,14 +18,14 @@ export function lineChart({ x, series, fmt = (v) => v, height = 240, title = "",
   for (let k = 0; k <= ticks; k++) {
     const v = lo + ((hi - lo) * k) / ticks;
     const y = sy(v);
-    grid += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#EEF0F3"/><text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#6B7280">${esc(fmt(v))}</text>`;
+    grid += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#212327"/><text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#7d8187">${esc(fmt(v))}</text>`;
   }
   const step = Math.max(1, Math.ceil(x.length / 6));
   let xl = "";
   x.forEach((t, i) => {
-    if (i % step === 0 || i === x.length - 1) xl += `<text x="${sx(i)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#6B7280">${esc(fmtDate(t).replace(/, \d{4}$/, ""))}</text>`;
+    if (i % step === 0 || i === x.length - 1) xl += `<text x="${sx(i)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="#7d8187">${esc(fmtDate(t).replace(/, \d{4}$/, ""))}</text>`;
   });
-  const zl = lo < 0 && hi > 0 ? `<line x1="${L}" x2="${W - R}" y1="${sy(0)}" y2="${sy(0)}" stroke="#9CA3AF" stroke-dasharray="4 3"/>` : "";
+  const zl = lo < 0 && hi > 0 ? `<line x1="${L}" x2="${W - R}" y1="${sy(0)}" y2="${sy(0)}" stroke="#565a60" stroke-dasharray="4 3"/>` : "";
   const bands = series
     .filter((s) => s.band)
     .map((s) => {
