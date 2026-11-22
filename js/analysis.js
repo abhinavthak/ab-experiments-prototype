@@ -46,7 +46,7 @@ export function metricBlock(e, mid, tot, { baseline = 0, kind = "secondary" } = 
   return { metric, rows, kind };
 }
 
-export const guardCutoff = (m) => m?.guardrailCutoff ?? 0.02;
+export const guardCutoff = (m, e) => e?.guardrailCutoffs?.[m?.id] ?? m?.guardrailCutoff ?? 0.02;
 
 export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) {
   const vs = S.variantsOf(e);
@@ -96,7 +96,7 @@ export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) 
   // Within cutoff = even the worst plausible value stays inside it. Otherwise: watch.
   guardrails.forEach((g) => g.rows.forEach((r) => {
     if (!r.r) return;
-    const cut = guardCutoff(g.metric);
+    const cut = guardCutoff(g.metric, e);
     const lowerIsBetter = g.metric.higherIsBetter === false;
     const harm = lowerIsBetter ? r.r.lift : -r.r.lift;
     const worst = lowerIsBetter ? r.r.ci[1] : -r.r.ci[0];

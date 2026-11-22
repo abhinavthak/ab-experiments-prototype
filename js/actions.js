@@ -294,7 +294,7 @@ export function duplicateExperiment(e) {
     trackingKey: S.uniqueKey(e.trackingKey.replace(/-\d+$/, "")),
     pageId: e.pageId, testKind: isUrl ? "url" : "variants", urlVariants: isUrl ? structuredClone(e.urlVariants) : null, variantIds: ids, weights: ids.map((_, i) => (i === 0 ? 100 - even * (ids.length - 1) : even)),
     hypothesis: e.hypothesis, description: e.description, tags: [...e.tags], coverage: e.coverage, targeting: { ...e.targeting },
-    primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics],
+    primaryMetric: e.primaryMetric, secondaryMetrics: [...e.secondaryMetrics], guardrailMetrics: [...e.guardrailMetrics], guardrailCutoffs: { ...(e.guardrailCutoffs || {}) },
     statsEngine: e.statsEngine, sequential: e.sequential, cuped: e.cuped, stopAfterDays: e.stopAfterDays, leadAttribution: e.leadAttribution,
     targeting: structuredClone(e.targeting), assignment: { ...e.assignment }, type: e.type, namespace: e.namespace ? structuredClone(e.namespace) : null,
     activationMetric: e.activationMetric, customFields: { ...e.customFields }, plannedMde: e.plannedMde,

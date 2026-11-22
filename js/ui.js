@@ -158,7 +158,9 @@ const tpChip = (t, label = t) => `<span class="tp-chip">${esc(label)}<button typ
 const tpGet = (w) => (w.querySelector("input[type=hidden]").value || "").split(",").filter(Boolean);
 
 function tpSet(w, tags, keepOpen = true) {
-  w.querySelector("input[type=hidden]").value = tags.join(",");
+  const hid = w.querySelector("input[type=hidden]");
+  hid.value = tags.join(",");
+  hid.dispatchEvent(new Event("change", { bubbles: true }));
   const inp = w.querySelector(".tp-in");
   w.querySelectorAll(".tp-chip").forEach((c) => c.remove());
   inp.insertAdjacentHTML("beforebegin", tags.map((t) => tpChip(t, tpLabel(w, t))).join(""));

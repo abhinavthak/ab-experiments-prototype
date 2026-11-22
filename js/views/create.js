@@ -115,7 +115,8 @@ export function powerTable(e, { compact = false } = {}) {
       ? callout("warn", `To detect a ${p} lift this test needs about ${dur(plannedRow.days)}, but it stops after ${e.stopAfterDays} days. Run it longer, raise the rollout or accept a bigger minimum lift.`)
       : callout("good", `${e.stopAfterDays} days is enough to detect a ${p} lift (needs about ${dur(plannedRow.days)}).`);
   })();
-  return compact ? `${facts}${verdict}<details class="adv"><summary>Days needed for other lifts</summary><div style="margin-top:10px">${table}</div></details>` : `${facts}${verdict}${table}`;
+  const line = `<div class="plan-line">${fmtInt(pe.daily)} visitors a day enter the test · ${esc(pe.metric.name)} ${fmtBase(pe.base)} on Control · ${pe.k} variants · ${conf} confidence, 80% power</div>`;
+  return compact ? `${verdict}${line}<details class="adv"><summary>Days needed for other lifts</summary><div style="margin-top:10px">${table}</div></details>` : `${facts}${verdict}${table}`;
 }
 
 const INFO = {
@@ -134,6 +135,16 @@ const INFO = {
   review: ["Review", "Summary of every setting; edit any section before creating the draft."],
 };
 const tip = (k) => infoTip(INFO[k][0], INFO[k][1]);
+// Numbered question heading inside a step, in the order of the setup flowchart.
+const q = (n, title, k, optional = false, forId = "") => `<div class="q">${forId ? `<label for="${forId}" class="q-in">` : `<span class="q-in">`}<span class="qn">${n}</span><span class="qt">${title}</span>${optional ? `<span class="opt">optional</span>` : ""}${forId ? "</label>" : "</span>"}${k ? tip(k) : ""}</div>`;
+const lowerIsBetter = (m) => m?.higherIsBetter === false;
+// What a guardrail cutoff means for this metric, e.g. "48.0% → at most 49.4%".
+export function cutoffExample(m, c) {
+  if (!m) return "";
+  const worse = m.base * (lowerIsBetter(m) ? 1 + c : 1 - c);
+  const f = (x) => (m.type === "binomial" ? fmtPct(x, x < 0.1 ? 2 : 1) : `${Math.round(x * 100) / 100}${m.unit || ""}`);
+  return `${f(m.base)} today → ${lowerIsBetter(m) ? "at most" : "at least"} ${f(worse)}`;
+}
 export const DURATIONS = [7, 14, 21, 28, 35, 42, 56];
 const weeksLabel = (dd) => `${dd / 7} week${dd === 7 ? "" : "s"} (${dd} days)`;
 
@@ -183,7 +194,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     const weight = (v, i) => (`<div class="pct-input"><input class="inp" type="number" min="0" max="100" name="w-${v.id}" value="${d.weights[i] ?? 0}" aria-label="Split for ${v.key}"><span>%</span></div>`);
     const paths = st.pages.filter((x) => x.id !== d.pageId).map((x) => `<option value="${esc(x.path)}">${esc(x.name)}</option>`).join("");
     const last = rows[rows.length - 1]?.key;
-    return `<div class="field"><span class="label">URLs &amp; ${bandit ? "starting split" : "split"} ${tip("split")}</span>
+    return `<div class="field">${q(4, `Variant URLs &amp; ${bandit ? "starting split" : "traffic split"}`, "split")}
       <datalist id="cms-paths">${paths}</datalist>
       ${rows.map((v, i) => i === 0
         ? `<div class="url-row">${chip(0)}<div class="url-main"><b>Original</b> <span class="badge">Control</span><div class="small mono" style="margin:2px 0 0">${esc(v.url)}</div></div>${weight(v, i)}<span></span></div>`
@@ -199,6 +210,12 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   let planOverride = false;
   let dirty = false;
 
+  const cutRows = () => d.guardrailMetrics.map((mid) => {
+    const m = S.metric(mid);
+    if (!m) return "";
+    const c = d.guardrailCutoffs?.[mid] ?? m.guardrailCutoff ?? 0.02;
+    return `<div class="gc-row"><b>${esc(m.name)}</b><span class="gc-mid">may get ${lowerIsBetter(m) ? "higher" : "lower"} by at most</span><div class="pct-input"><input class="inp" type="number" name="gc-${mid}" min="0.5" max="50" step="0.5" value="${Math.round(c * 1000) / 10}" aria-label="Cutoff for ${esc(m.name)}"><span>%</span></div><span class="gc-ex" data-gc-ex="${mid}">${esc(cutoffExample(m, c))}</span></div>`;
+  }).join("");
   const steps = {
     basics: () => {
       const cfs = st.customFields;
@@ -218,10 +235,10 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       const p = S.page(d.pageId);
       const vs = p ? S.variantsOf(d) : [];
       const isUrl = d.testKind === "url";
-      const typeCards = `<div class="field"><span class="label">Testing type ${tip("type")}</span><div class="type-cards compact" role="radiogroup" aria-label="Testing type">
+      const typeCards = `<div class="field">${q(1, "Testing type", "type")}<div class="type-cards compact" role="radiogroup" aria-label="Testing type">
         ${[["standard", "A/B test", "Fixed split for the whole run; a clean readout."], ["bandit", "Multi-armed bandit", "Shifts traffic toward the better variant as data comes in."]]
           .map(([k, t, sub]) => `<label class="check ${d.type === k ? "on" : ""}"><input type="radio" name="type" value="${k}" ${d.type === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
-      const kindCards = typeCards + `<div class="field"><span class="label">Category of testing ${tip("category")}</span><div class="type-cards compact" role="radiogroup" aria-label="What are you comparing">
+      const kindCards = typeCards + `<div class="field">${q(2, "Category of testing", "category")}<div class="type-cards compact" role="radiogroup" aria-label="What are you comparing">
         ${[["variants", "Original vs variant", "Same URL; the CMS swaps sections of the page."], ["url", "URL vs URL", "Split URL; some visitors are redirected to another page."]]
           .map(([k, t, sub]) => `<label class="check ${d.testKind === k ? "on" : ""}"><input type="radio" name="kind" value="${k}" ${d.testKind === k ? "checked" : ""}><span><span class="t1">${t}</span><span class="t2">${sub}</span></span></label>`).join("")}</div></div>`;
       const pageWhy = (x) => {
@@ -233,7 +250,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         const why = eligibility(x);
         return why ? why.toLowerCase() : `${x.variants.length} variants`;
       };
-      const pageField = `<div class="field"><label for="c-page">${isUrl ? "Original page · A (Control)" : "Page to test"} ${tip("pages")}</label>
+      const pageField = `<div class="field">${q(3, isUrl ? "Original page (A, Control)" : "Page to test", "pages", false, "c-page")}
         <select id="c-page" name="page" class="inp"><option value="">Choose a published page</option>${pages.map((x) => `<option value="${x.id}" ${x.id === d.pageId ? "selected" : ""} ${x.status !== "live" ? "disabled" : ""}>${esc(x.name)} — ${esc(pageWhy(x))}</option>`).join("")}</select>`;
       const conflict = (() => {
         if (!p) return "";
@@ -247,7 +264,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       return `${kindCards}${pageField}
         ${p ? `<div class="hint mono">${esc(p.path)}</div>` : ""}<div data-err="page"></div></div>
       ${conflict}
-      ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field"><span class="label">Variants &amp; ${d.type === "bandit" ? "starting split" : "split"} ${tip("split")}</span>
+      ${!p ? "" : p.variants.length < 2 ? "" : `<div class="field">${q(4, `Variants &amp; ${d.type === "bandit" ? "starting split" : "traffic split"}`, "split")}
         ${p.variants.map((v) => {
           const i = d.variantIds.indexOf(v.id);
           const on = i >= 0;
@@ -264,12 +281,12 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     targeting: () => {
       const t = d.targeting;
       const hashLabel = HASH_ATTRS.find(([k]) => k === d.assignment.hashAttribute)?.[1] || "";
-      return `<div class="row"><div class="grow field"><label for="c-aud">Audience ${tip("targeting")}</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile + Desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-        <div class="field" style="width:150px"><label for="c-cov">Rollout ${tip("rollout")}</label><div class="pct-input"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div></div></div>
-      <div data-err="coverage"></div>
-      <div class="reach" data-reach></div>
-      <div class="field"><span class="label">Custom conditions <span class="opt">· optional</span></span><div class="hint" style="margin:0 0 10px">Each rule reads as a sentence. A visitor must match every rule; everyone else sees the original and isn't counted.</div>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
+      return `<div class="field">${q(1, "Audience and device", "targeting")}
+        <div class="row"><div class="grow"><label class="sub-l" for="c-aud">Audience</label><select id="c-aud" name="audience" class="inp">${[["all", "All visitors"], ["new", "New visitors"], ["returning", "Returning visitors"]].map(([k, l]) => `<option value="${k}" ${t.audience === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="grow"><label class="sub-l" for="c-dev">Device</label><select id="c-dev" name="device" class="inp">${[["all", "Mobile and desktop"], ["mobile", "Mobile only"], ["desktop", "Desktop only"]].map(([k, l]) => `<option value="${k}" ${t.device === k ? "selected" : ""}>${l}</option>`).join("")}</select></div></div></div>
+      <div class="field">${q(2, "Custom conditions", "", true)}<div class="hint" style="margin:0 0 10px">e.g. UTM source or city. Visitors must match every rule.</div>${conditionEditor(t.conditions || [], { prefix: "cond" })}</div>
+      <div class="field">${q(3, "Rollout", "rollout", false, "c-cov")}
+        <div class="row" style="align-items:center"><div class="pct-input" style="width:140px"><input id="c-cov" name="coverage" type="number" min="1" max="100" class="inp" value="${d.coverage}"><span>%</span></div><div class="reach grow" data-reach style="margin:0"></div></div><div data-err="coverage"></div></div>
       <details class="adv"><summary>Advanced <span class="opt">· ${t.excludeLeads ? "excluding existing leads · " : ""}assigned by ${esc(hashLabel.toLowerCase())}${d.assignment.sticky ? ", sticky" : ""}</span></summary>
         <label class="check" style="margin:12px 0"><input type="checkbox" name="excludeLeads" ${t.excludeLeads ? "checked" : ""}><span><span class="t1">Exclude existing leads</span><span class="t2">Visitors who already submitted a form on this page see Control</span></span></label>
         <div class="row"><div class="grow field"><label for="c-hash">Assign variants by</label><select id="c-hash" name="hash" class="inp">${HASH_ATTRS.map(([k, l]) => `<option value="${k}" ${d.assignment.hashAttribute === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
@@ -279,9 +296,11 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     metrics: () => {
       const p = S.page(d.pageId);
       const opts = st.metrics.filter((m) => !(m.requires === "leadForm" && p && !p.hasLeadForm)).map((m) => [m.id, m.name]);
-      return `<div class="field"><label for="c-primary">${d.type === "bandit" ? "Decision metric" : "Primary metric"} ${tip("metrics")}</label><select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div class="hint">The one number that decides the winner.${d.type === "bandit" ? " Bandits support conversion metrics only." : ""}</div><div data-err="primary"></div></div>
-        <div class="row"><div class="grow field"><label for="c-guard">Guardrails <span class="opt">· optional</span></label>${multiPicker({ id: "c-guard", name: "guardrail", options: opts, selected: d.guardrailMetrics, placeholder: "e.g. Bounce rate" })}<div class="hint">Fail if a variant is clearly worse by more than each metric's cutoff (e.g. Bounce rate 3%).</div></div>
-          <div class="grow field"><label for="c-sec">Secondary <span class="opt">· optional</span></label>${multiPicker({ id: "c-sec", name: "secondary", options: opts, selected: d.secondaryMetrics, placeholder: "Add metrics" })}<div class="hint">Context only; not used to pick the winner.</div></div></div>
+      return `<div class="field">${q(1, d.type === "bandit" ? "Decision metric" : "Primary metric", "metrics", false, "c-primary")}<select id="c-primary" name="primary" class="inp">${metricOptions(d.primaryMetric, p, { onlyBinomial: d.type === "bandit" })}</select><div class="hint">The one number that decides the winner.${d.type === "bandit" ? " Bandits support conversion metrics only." : ""}</div><div data-err="primary"></div></div>
+        <div class="field">${q(2, "Guardrail metrics and cutoffs", "", true, "c-guard")}${multiPicker({ id: "c-guard", name: "guardrail", options: opts, selected: d.guardrailMetrics, placeholder: "Add a guardrail, e.g. Bounce rate" })}
+          <div class="hint">For each guardrail, decide how much worse it may get before it blocks a winner.</div>
+          <div class="guard-cuts" data-guard-cuts>${cutRows()}</div><div data-err="gc"></div></div>
+        <div class="field">${q(3, "Secondary metrics", "", true, "c-sec")}${multiPicker({ id: "c-sec", name: "secondary", options: opts, selected: d.secondaryMetrics, placeholder: "Add metrics" })}<div class="hint">Context only; not used to pick the winner.</div></div>
         <details class="adv" ${d.activationMetric ? "open" : ""}><summary>Activation metric <span class="opt">· optional</span></summary>
           <div class="field" style="margin:12px 0 0"><label class="sr-only" for="c-act">Activation metric</label><select id="c-act" name="activation" class="inp">${metricOptions(d.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only analyse visitors who did this, e.g. scrolled to the fee section.</div></div></details>`;
     },
@@ -298,15 +317,15 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         const lift = pe.rows.find((r) => r.mde > d.plannedMde && r.days <= d.stopAfterDays);
         if (lift) out.push(`<button type="button" class="btn xs" data-local="plan-fix" data-mde="${lift.mde}">Detect a ${fmtPct(lift.mde, 0)} lift instead</button>`);
         if (d.coverage < 100) out.push(`<button type="button" class="btn xs" data-goto="2">Raise rollout (now ${d.coverage}%)</button>`);
-        return `<div class="plan-fix">${out.join("")}</div><label class="check" style="margin:-6px 0 16px"><input type="checkbox" name="planOverride" ${planOverride ? "checked" : ""}><span><span class="t1">Run it anyway</span><span class="t2">Results may end as No clear winner.</span></span></label>`;
+        return `<div class="plan-fix">${out.join("")}</div><label class="check" style="margin:0"><input type="checkbox" name="planOverride" ${planOverride ? "checked" : ""}><span><span class="t1">Run it anyway</span><span class="t2">Results may end as No clear winner.</span></span></label>`;
       })();
-      return `<div class="row"><div class="grow field"><label for="c-stop">Experiment duration ${tip("plan")}</label><select id="c-stop" name="stop" class="inp">${DURATIONS.map((o) => `<option value="${o}" ${o === d.stopAfterDays ? "selected" : ""}>${weeksLabel(o)}</option>`).join("")}</select></div>
-        <div class="grow field"><label for="c-mde">Minimum detectable lift</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div>
-      <div class="label" style="margin-bottom:8px">Plan check ${tip("fits")}</div>
+      return `<div class="field">${q(1, "Duration and minimum detectable lift", "plan")}<div class="row"><div class="grow"><label class="sub-l" for="c-stop">Experiment duration</label><select id="c-stop" name="stop" class="inp">${DURATIONS.map((o) => `<option value="${o}" ${o === d.stopAfterDays ? "selected" : ""}>${weeksLabel(o)}</option>`).join("")}</select></div>
+        <div class="grow"><label class="sub-l" for="c-mde">Minimum detectable lift</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div></div>
+      <div class="field">${q(2, "Plan check", "fits")}
       ${powerTable(d, { compact: true })}
       <div data-err="plan"></div>
-      ${fixes}
-      <div class="field"><span class="label">Statistic type ${tip("stats")}</span><div class="type-cards compact stat-cards">${[["bayesian", "Bayesian", "Probability to beat the original, and risk"], ["frequentist", "Frequentist", "p-value and 95% confidence interval"]].map(([k, t, sub]) => {
+      ${fixes}</div>
+      <div class="field">${q(3, "Statistic type", "stats")}<div class="type-cards compact stat-cards">${[["bayesian", "Bayesian", "Probability to beat the original, and risk"], ["frequentist", "Frequentist", "p-value and 95% confidence interval"]].map(([k, t, sub]) => {
         const off = bandit && k === "frequentist";
         return `<label class="check ${d.statsEngine === k ? "on" : ""} ${off ? "disabled" : ""}"><input type="radio" name="engine" value="${k}" ${d.statsEngine === k ? "checked" : ""} ${off ? "disabled" : ""}><span><span class="t1">${t}</span><span class="t2">${off ? "Not available for bandits" : sub}</span></span></label>`;
       }).join("")}</div>${bandit ? `<div class="hint">Bandits always use Bayesian.</div>` : ""}</div>
@@ -356,7 +375,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
 
           ${sec("Metrics", 3, `${kv("Primary", d.primaryMetric ? `<b>${mName(d.primaryMetric)}</b>` : `<span class="down">Not selected</span>`)}
             ${kv("Secondary", d.secondaryMetrics.length ? d.secondaryMetrics.map(mName).join(", ") : none())}
-            ${kv("Guardrails", d.guardrailMetrics.length ? d.guardrailMetrics.map(mName).join(", ") : none())}
+            ${kv("Guardrails", d.guardrailMetrics.length ? d.guardrailMetrics.map((m) => `${mName(m)} <span class="faint">(≤ ${fmtPct(d.guardrailCutoffs?.[m] ?? S.metric(m)?.guardrailCutoff ?? 0.02, 1).replace(".0%", "%")} worse)</span>`).join("<br>") : none())}
             ${d.activationMetric ? kv("Activation", mName(d.activationMetric)) : ""}`)}
 
           ${sec("Analysis", 4, `${kv("Statistics", `${d.statsEngine === "bayesian" ? "Bayesian" : `Frequentist${d.sequential ? ", sequential" : ""}`}${d.cuped ? " · CUPED" : ""}`)}
@@ -375,7 +394,19 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
     },
   };
 
-  const stepper = () => `<ol class="stepper">${STEPS.map(([k, l], i) => `<li class="${i === step ? "on" : i < step || i <= seen ? "done" : ""}"><button type="button" data-goto="${i}" ${i <= seen ? "" : "disabled"}><span class="n">${i < step ? "✓" : i + 1}</span>${l}</button></li>`).join("")}</ol>`;
+  const summary = (k) => {
+    const t = d.targeting;
+    if (k === "basics") return d.name;
+    if (k === "variants") return `${d.type === "bandit" ? "Bandit" : "A/B test"} · ${d.testKind === "url" ? "URL vs URL" : "Original vs variant"}`;
+    if (k === "targeting") return `${t.audience === "all" ? "All visitors" : t.audience === "new" ? "New visitors" : "Returning"} · ${t.device === "all" ? "all devices" : t.device} · ${d.coverage}%`;
+    if (k === "metrics") return S.metric(d.primaryMetric)?.name || "";
+    if (k === "analysis") return `${d.stopAfterDays / 7} wk · ${fmtPct(d.plannedMde, 0)} lift · ${d.statsEngine === "bayesian" ? "Bayesian" : "Frequentist"}`;
+    return "";
+  };
+  const stepper = () => `<ol class="stepper">${STEPS.map(([k, l], i) => {
+    const sm = i !== step && i <= seen ? summary(k) : "";
+    return `<li class="${i === step ? "on" : i < step || i <= seen ? "done" : ""}"><button type="button" data-goto="${i}" ${i <= seen ? "" : "disabled"}><span class="n">${i < step ? "✓" : i + 1}</span><span class="st"><span class="sl">${l}</span>${sm ? `<span class="ss">${esc(sm)}</span>` : ""}</span></button></li>`;
+  }).join("")}</ol>`;
   const footer = () => `<button type="button" class="btn sm" data-local="cancel">Cancel</button><span style="flex:1"></span>${step > 0 ? `<button type="button" class="btn sm" data-local="back">Back</button>` : ""}${step < STEPS.length - 1 ? `<button type="submit" class="btn sm primary" value="next">Next: ${STEPS[step + 1][1]}</button>` : `<button type="submit" class="btn sm primary" value="create">Create draft</button>`}`;
 
   // Read the current step's fields into d. Returns an errors map.
@@ -453,6 +484,12 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       d.secondaryMetrics = list("secondary");
       d.guardrailMetrics = list("guardrail");
       d.activationMetric = fd.get("activation") || null;
+      d.guardrailCutoffs = Object.fromEntries(d.guardrailMetrics.map((mid) => {
+        const raw = fd.get(`gc-${mid}`);
+        const v = raw == null || raw === "" ? (d.guardrailCutoffs?.[mid] ?? S.metric(mid)?.guardrailCutoff ?? 0.02) : Number(raw) / 100;
+        if (!(v >= 0.005 && v <= 0.5)) errs.gc = "Set each guardrail cutoff between 0.5% and 50%";
+        return [mid, v];
+      }));
       if (!d.primaryMetric) errs.primary = "Choose a primary metric";
     } else if (k === "analysis") {
       d.statsEngine = d.type === "bandit" ? "bayesian" : fd.get("engine") || d.statsEngine;
@@ -479,7 +516,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   const paint = () => {
     const form = formRef;
     const [hq, hs] = STEP_HEAD[STEPS[step][0]];
-    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-head"><h3>${hq}</h3><p>${hs}</p></div><div class="step-body">${steps[STEPS[step][0]]()}</div>`;
+    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-main"><div class="step-head"><div class="step-of">Step ${step + 1} of ${STEPS.length}</div><h3>${hq}</h3><p>${hs}</p></div><div class="step-body">${steps[STEPS[step][0]]()}</div></div>`;
     form.querySelector(".modal-f").innerHTML = footer();
     form.querySelector("#modal-title").textContent = "New experiment";
     wire(form);
@@ -597,6 +634,18 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       form.addEventListener("change", reach);
       form.addEventListener("input", reach);
       reach();
+    }
+    if (k === "metrics") {
+      const box = form.querySelector("[data-guard-cuts]");
+      form.querySelector("input[name=guardrail]")?.addEventListener("change", () => {
+        collect(form);
+        box.innerHTML = cutRows();
+      });
+      box.addEventListener("input", (ev) => {
+        const mid = ev.target.name?.replace(/^gc-/, "");
+        const ex = box.querySelector(`[data-gc-ex="${mid}"]`);
+        if (ex) ex.textContent = cutoffExample(S.metric(mid), (Number(ev.target.value) || 0) / 100);
+      });
     }
     if (k === "analysis") {
       form.querySelectorAll("[data-local=plan-fix]").forEach((b) => b.addEventListener("click", () => {

@@ -7,7 +7,7 @@ import { esc, fmtDate, fmtDateTime, fmtInt, fmtPct, fmtLift, timeAgo, DAY, daysB
 import { lineChart } from "../chart.js";
 import * as Sim from "../sim.js";
 import { compare } from "../stats.js";
-import { metricOptions, powerTable, customFieldInputs } from "./create.js";
+import { metricOptions, powerTable, customFieldInputs, cutoffExample } from "./create.js";
 import { conditionEditor, bindConditions, HASH_ATTRS, condText, CONDITIONS_INTRO } from "./targeting.js";
 import { RESULT_LABEL } from "../store.js";
 
@@ -146,7 +146,13 @@ function overview(e) {
       <h2>Metrics</h2><div class="card-sub">One primary metric picks the winner. Secondary metrics help explain why; guardrails catch harm.</div>
       <div class="field"><label for="m-primary">${isBandit ? "Decision metric" : "Primary"} · one only</label>${can(e, "changePrimary") ? "" : `<div style="margin-bottom:6px">${lock(why(e, "changePrimary"))}</div>`}<select id="m-primary" class="inp" data-primary ${can(e, "changePrimary") ? "" : "disabled"}>${metricOptions(e.primaryMetric, p, { onlyBinomial: isBandit })}</select><div class="hint">Counted once per visitor, credited to the variant they saw, within ${S.metric(e.primaryMetric)?.windowHours ?? 72} hours of first exposure.</div></div>
       ${metricBox("secondaryMetrics", e.secondaryMetrics, `Secondary · ${e.secondaryMetrics.length}`, "Tracked for context.", can(e, "editSecondary"))}
-      ${metricBox("guardrailMetrics", e.guardrailMetrics, `Guardrails · ${e.guardrailMetrics.length}`, `Fail when a variant is clearly worse by more than the metric's cutoff (${e.guardrailMetrics.map((m) => `${S.metric(m)?.name} ${fmtPct(guardCutoff(S.metric(m)), 0)}`).join(", ") || "set per metric"})${st.settings.guardrailsBlockShip ? "; a failing guardrail blocks a “Ship now” call" : ""}.`, can(e, "editSecondary"))}
+      ${metricBox("guardrailMetrics", e.guardrailMetrics, `Guardrails · ${e.guardrailMetrics.length}`, `Fail when a variant is clearly worse by more than its cutoff${st.settings.guardrailsBlockShip ? "; a failing guardrail blocks a “Ship now” call" : ""}.`, can(e, "editSecondary"))}
+      ${e.guardrailMetrics.length ? `<div class="field"><span class="label">Guardrail cutoffs</span><div class="guard-cuts">${e.guardrailMetrics.map((mid) => {
+        const m = S.metric(mid);
+        const c = guardCutoff(m, e);
+        const editable = can(e, "editVariants");
+        return `<div class="gc-row"><b>${esc(m?.name || mid)}</b><span class="gc-mid">may get ${m?.higherIsBetter === false ? "higher" : "lower"} by at most</span>${editable ? `<div class="pct-input"><input class="inp" type="number" min="0.5" max="50" step="0.5" data-gcut="${mid}" value="${Math.round(c * 1000) / 10}" aria-label="Cutoff for ${esc(m?.name || mid)}"><span>%</span></div>` : `<b>${fmtPct(c, 1)}</b>`}<span class="gc-ex">${esc(cutoffExample(m, c))}</span></div>`;
+      }).join("")}</div>${can(e, "editVariants") ? "" : `<div class="hint">Locked once the test starts, so the bar can't move after results come in.</div>`}</div>` : ""}
       <div class="field"><label for="m-act">Activation metric</label><select id="m-act" class="inp" data-activation ${can(e, "changePrimary") ? "" : "disabled"}>${metricOptions(e.activationMetric, p, { placeholder: "None · count every visitor" })}</select><div class="hint">Only visitors who did this are analysed.</div></div>
       <label class="check"><input type="checkbox" data-flag="leadAttribution" ${e.leadAttribution ? "checked" : ""} ${can(e, "editText") ? "" : "disabled"}><span><span class="t1">Tag leads with experiment and variant</span><span class="t2">Adds exp_key and variant to every lead from this page, so counsellors and CRM reports can split by variant.</span></span></label>
     </section>
@@ -388,7 +394,7 @@ export function resultsBody(e, ui, { report = false } = {}) {
   ${dimensionBlock(e, ui, a)}
   ${chartFor(e, ui, a)}` : callout("warn", "No primary metric is set, so there's nothing to decide on.")}
   ${a.secondary.length ? `<section class="card"><div class="toolbar"><b>Secondary metrics</b></div>${a.secondary.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
-  ${a.guardrails.length ? `<section class="card"><div class="toolbar"><b>Guardrails</b><span class="faint" style="font-size:13px">Fails when a variant is clearly worse by more than the metric's cutoff</span></div>${a.guardrails.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)} · may get up to ${fmtPct(guardCutoff(b.metric), 0)} worse</div><div class="guard-states">${b.rows.filter((r) => r.guard || (r.i !== a.baseline && !r.enough)).map((r) => guardChip(r)).join("")}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
+  ${a.guardrails.length ? `<section class="card"><div class="toolbar"><b>Guardrails</b><span class="faint" style="font-size:13px">Fails when a variant is clearly worse by more than the metric's cutoff</span></div>${a.guardrails.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)} · may get up to ${fmtPct(guardCutoff(b.metric, e), 0)} worse</div><div class="guard-states">${b.rows.filter((r) => r.guard || (r.i !== a.baseline && !r.enough)).map((r) => guardChip(r)).join("")}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}
   ${conclusion}
   ${reports.length ? `<section class="card pad"><h2>Reports</h2><div class="card-sub">Saved views of these results with fixed settings, for sharing.</div><ul class="timeline">${reports.map((r) => `<li>${avatar(r.by)}<div><a href="#/report/${r.id}"><b>${esc(r.title)}</b></a><div class="when">${fmtDate(r.createdAt)}</div></div></li>`).join("")}</ul></section>` : ""}`;
 }
@@ -533,6 +539,12 @@ export function bind(root, rerender, { id }) {
     e.plannedMde = Number(ev.target.value);
     commit(`Planned to detect a ${fmtPct(e.plannedMde, 0)} lift`);
   });
+  root.querySelectorAll("[data-gcut]").forEach((inp) => inp.addEventListener("change", () => {
+    const v = Number(inp.value) / 100;
+    if (!(v >= 0.005 && v <= 0.5)) return toast("Set a cutoff between 0.5% and 50%", "bad");
+    e.guardrailCutoffs = { ...(e.guardrailCutoffs || {}), [inp.dataset.gcut]: v };
+    commit(`Set the ${S.metric(inp.dataset.gcut)?.name} guardrail cutoff to ${fmtPct(v, 1)}`);
+  }));
   root.querySelectorAll("[data-mlist]").forEach((cb) =>
     cb.addEventListener("change", () => {
       const k = cb.dataset.mlist;

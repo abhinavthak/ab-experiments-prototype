@@ -61,7 +61,7 @@ function seed(now) {
 
   const e1 = base({ id: "e_bba", name: "Online BBA — banner & sticky CTA", trackingKey: "online-bba-banner-cta", pageId: bba.id, variantIds: ids(bba, ["A", "B", "C"]), weights: [34, 33, 33],
     hypothesis: "A shorter banner with a sticky Apply Now bar will increase enquiry form submissions on mobile.", tags: ["banner", "mobile"], watched: true,
-    primaryMetric: "m_lead", secondaryMetrics: ["m_enroll", "m_payment"], guardrailMetrics: ["m_lcp", "m_bounce"],
+    primaryMetric: "m_lead", secondaryMetrics: ["m_enroll", "m_payment"], guardrailMetrics: ["m_lcp", "m_bounce"], guardrailCutoffs: { m_lcp: 0.05, m_bounce: 0.03 },
     status: "running", startedAt: d(-8), stopAfterDays: 21, createdAt: d(-10),
     sim: { seed: 11, lifts: { B: { m_lead: 0.177, m_enroll: 0.32, m_payment: 0.12, m_bounce: -0.06 }, C: { m_lead: 0.04, m_lcp: 0.38, m_enroll: 0.04 } } } });
   e1.midTestEdits.push({ variantKey: "B", section: "Banner", at: d(-4) + 6 * 3600000 });
@@ -353,7 +353,7 @@ export function newExperimentDraft() {
     watched: true, coverage: 100, targeting: { audience: "all", device: "all", excludeLeads: false, conditions: [] }, primaryMetric: null,
     assignment: { hashAttribute: state.settings.hashAttribute, fallback: "", sticky: state.settings.stickyDefault }, type: "standard", namespace: null, activationMetric: null,
     customFields: {}, analysisSummary: "", plannedMde: 0.1, phases: [],
-    secondaryMetrics: [], guardrailMetrics: [], statsEngine: state.settings.statsEngine, sequential: state.settings.sequentialDefault && state.settings.statsEngine === "frequentist", cuped: state.settings.cupedDefault, leadAttribution: true,
+    secondaryMetrics: [], guardrailMetrics: [], guardrailCutoffs: {}, statsEngine: state.settings.statsEngine, sequential: state.settings.sequentialDefault && state.settings.statsEngine === "frequentist", cuped: state.settings.cupedDefault, leadAttribution: true,
     status: "draft", archived: false, scheduledStart: null, stopAfterDays: 21, startedAt: null, endedAt: null, result: null, winnerVariantId: null,
     releasedVariantId: null, stoppedAutomatically: false, midTestEdits: [], comments: [], history: [], sim: null, createdAt: now(), updatedAt: now(),
   };
