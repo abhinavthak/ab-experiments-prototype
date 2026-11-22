@@ -112,7 +112,7 @@ export function powerTable(e, { compact = false } = {}) {
     if (ms) return ""; // stopped: the table is for reference
     if (!e.stopAfterDays) return callout("info", `Plan to run it about ${dur(plannedRow.days)} to detect a ${p} lift.`);
     return plannedRow.days > e.stopAfterDays
-      ? callout("warn", `To detect a ${p} lift this test needs about ${dur(plannedRow.days)}, but it stops after ${e.stopAfterDays} days. Run it longer, raise the rollout or accept a bigger minimum lift.`)
+      ? callout("warn", `Suggestion: to detect a ${p} lift this test needs about ${dur(plannedRow.days)}, but it runs ${e.stopAfterDays} days. Consider running longer, raising the rollout or accepting a bigger lift. You can keep this plan.`)
       : callout("good", `${e.stopAfterDays} days is enough to detect a ${p} lift (needs about ${dur(plannedRow.days)}).`);
   })();
   const line = `<div class="plan-line">${fmtInt(pe.daily)} visitors a day enter the test · ${esc(pe.metric.name)} ${fmtBase(pe.base)} on Control · ${pe.k} variants · ${conf} confidence, 80% power</div>`;
@@ -129,7 +129,7 @@ const INFO = {
   rollout: ["Rollout %", ["Share of targeted traffic that enters the experiment; the rest sees the original", "Start at 10–20% for risky changes"]],
   metrics: ["Metrics", ["Primary: decides the winner; bandits support conversion metrics only", "Guardrail: must not get worse than its cutoff", "Secondary: context only, not used to pick the winner"]],
   plan: ["Analysis plan", ["Duration: full weeks, minimum 7 days", "Minimum detectable lift: smallest change worth detecting; a smaller lift needs more traffic and time"]],
-  fits: ["Plan check", "Sample needed is estimated from traffic, rollout % and lift. If the run is too short: run longer, accept a bigger lift or raise rollout."],
+  fits: ["Suggested duration", "A suggestion, not a rule. It estimates the days needed from traffic, rollout % and lift. If your plan is shorter you can still continue; the test may end with No clear winner."],
   stats: ["Statistic type", ["Bayesian: probability to beat the original; locked for bandits", "Frequentist: p-value and 95% confidence interval"]],
   sequential: ["Sequential testing", ["On: you can check results and stop early safely", "Off: read results only at the planned end date"]],
   review: ["Review", "Summary of every setting; edit any section before creating the draft."],
@@ -207,7 +207,6 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   let step = 0;
   let seen = 0;
   let keyTouched = false;
-  let planOverride = false;
   const completed = new Set(); // steps the user has passed with Next
   let dirty = false;
 
@@ -318,11 +317,11 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         const lift = pe.rows.find((r) => r.mde > d.plannedMde && r.days <= d.stopAfterDays);
         if (lift) out.push(`<button type="button" class="btn xs" data-local="plan-fix" data-mde="${lift.mde}">Detect a ${fmtPct(lift.mde, 0)} lift instead</button>`);
         if (d.coverage < 100) out.push(`<button type="button" class="btn xs" data-goto="2">Raise rollout (now ${d.coverage}%)</button>`);
-        return `<div class="plan-fix">${out.join("")}</div><label class="check" style="margin:0"><input type="checkbox" name="planOverride" ${planOverride ? "checked" : ""}><span><span class="t1">Run it anyway</span><span class="t2">Results may end as No clear winner.</span></span></label>`;
+        return `<div class="plan-fix"><span class="faint" style="font-size:13px;align-self:center">Optional fixes:</span>${out.join("")}</div>`;
       })();
       return `<div class="field">${q(1, "Duration and minimum detectable lift", "plan")}<div class="row"><div class="grow"><label class="sub-l" for="c-stop">Experiment duration</label><select id="c-stop" name="stop" class="inp">${DURATIONS.map((o) => `<option value="${o}" ${o === d.stopAfterDays ? "selected" : ""}>${weeksLabel(o)}</option>`).join("")}</select></div>
         <div class="grow"><label class="sub-l" for="c-mde">Minimum detectable lift</label><select id="c-mde" name="mde" class="inp">${[0.05, 0.1, 0.15, 0.2].map((m) => `<option value="${m}" ${Math.abs(m - d.plannedMde) < 1e-9 ? "selected" : ""}>${fmtPct(m, 0)}</option>`).join("")}</select></div></div></div>
-      <div class="field">${q(2, "Plan check", "fits")}
+      <div class="field">${q(2, "Suggested duration", "fits", true)}
       ${powerTable(d, { compact: true })}
       <div data-err="plan"></div>
       ${fixes}</div>
@@ -497,10 +496,6 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       d.sequential = d.statsEngine === "frequentist" && !!fd.get("sequential");
       d.stopAfterDays = Number(fd.get("stop")) || 21;
       d.plannedMde = Number(fd.get("mde"));
-      planOverride = !!fd.get("planOverride");
-      const pe = powerEstimate(d);
-      const row = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
-      if (row && row.days > d.stopAfterDays && !planOverride) errs.plan = `To detect a ${fmtPct(d.plannedMde, 0)} lift this test needs about ${row.days > 365 ? "more than a year" : `${row.days} days`}, but it runs ${d.stopAfterDays}. Use a fix below, or tick Run it anyway.`;
     }
     return errs;
   };
@@ -547,7 +542,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       ["Type & variants", !!p && p.status === "live" && vs.length >= 2 && sum100 && urlsSet, !p ? "Pick a page" : !sum100 ? "Split must add up to 100%" : "Add a variant"],
       ["Targeting", d.coverage >= 1 && d.coverage <= 100, "Set a rollout between 1% and 100%"],
       ["Metrics", !!pm && cutsOk, !pm ? "Choose a primary metric" : "Check guardrail cutoffs"],
-      ["Analysis plan", !!fits || planOverride, "Plan doesn't fit the duration"],
+      ["Analysis plan", !!d.stopAfterDays, "Set a duration"],
     ];
     const state = (i, ok) => (completed.has(i) ? (ok ? "ok" : "warn") : i === step ? "now" : "todo");
     const done = items.filter(([, ok], i) => state(i, ok) === "ok").length;
@@ -559,7 +554,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
       <div class="wz-sec"><div class="wz-h">Traffic</div>${flow}</div>
       <div class="wz-sec"><div class="wz-h">Decides the winner</div>${pm ? `<div class="wz-metric">${esc(pm.name)}</div>` : `<div class="wz-empty">Choose a primary metric in step 4.</div>`}
         ${d.guardrailMetrics.length ? `<div class="wz-guards">${d.guardrailMetrics.map((m) => `<span class="wz-g">${esc(S.metric(m)?.name || m)} <b>≤ ${Math.round((d.guardrailCutoffs?.[m] ?? S.metric(m)?.guardrailCutoff ?? 0.02) * 1000) / 10}%</b></span>`).join("")}</div>` : ""}</div>
-      <div class="wz-sec"><div class="wz-h">Duration</div>${!pe ? `<div class="wz-empty">Appears once a page and primary metric are set.</div>` : `<div class="wz-dur ${fits ? "ok" : "short"}"><b>${d.stopAfterDays / 7} week${d.stopAfterDays === 7 ? "" : "s"}</b> to detect a ${fmtPct(d.plannedMde, 0)} lift<div>${fits ? `Enough: needs about ${row.days} days` : `Too short: needs about ${row.days > 365 ? "a year+" : `${row.days} days`}`}</div></div>`}</div>
+      <div class="wz-sec"><div class="wz-h">Duration</div>${!pe ? `<div class="wz-empty">Appears once a page and primary metric are set.</div>` : `<div class="wz-dur ${fits ? "ok" : "short"}"><b>${d.stopAfterDays / 7} week${d.stopAfterDays === 7 ? "" : "s"}</b> to detect a ${fmtPct(d.plannedMde, 0)} lift<div>${fits ? `Enough: needs about ${row.days} days` : `Suggested: about ${row.days > 365 ? "a year+" : `${row.days} days`}. You can still continue.`}</div></div>`}</div>
       <div class="wz-ready"><div class="wz-rh"><span>Ready to create</span><b>${done} of ${items.length} steps</b></div><div class="wz-meter"><i style="width:${(done / items.length) * 100}%"></i></div>
         <ul>${items.map(([l, ok, fix], i) => {
           const stt = state(i, ok);
@@ -732,7 +727,7 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
         paint();
       }));
       form.addEventListener("change", (ev) => {
-        if (STEPS[step][0] === "analysis" && ["engine", "stop", "mde", "sequential", "planOverride"].includes(ev.target.name)) {
+        if (STEPS[step][0] === "analysis" && ["engine", "stop", "mde", "sequential"].includes(ev.target.name)) {
           collect(form);
           paint();
         }
