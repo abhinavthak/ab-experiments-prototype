@@ -513,12 +513,72 @@ export function openCreate(prefPageId, { type = "standard" } = {}) {
   };
 
   let formRef = null;
+  // Live preview panel: rebuilt from the draft as the user types.
+  const side = () => {
+    const p = S.page(d.pageId);
+    const t = d.targeting;
+    const vs = p ? S.variantsOf(d) : [];
+    const color = (i) => VARIANT_COLORS[i % VARIANT_COLORS.length];
+    const devShare = t.device === "mobile" ? 0.62 : t.device === "desktop" ? 0.38 : 1;
+    const traffic = p?.traffic || 0;
+    const eligible = traffic * targetingFactor(t, d) * devShare;
+    const inTest = eligible * (Number(d.coverage) || 0) / 100;
+    const pct = (x) => `${Math.max(2, Math.min(100, traffic ? (x / traffic) * 100 : 0))}%`;
+    const wsum = d.weights.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
+    const flow = !p ? `<div class="wz-empty">Pick a page in step 2 to see how many visitors this test reaches.</div>` : `
+      <div class="wz-flow">
+        <div class="wz-fr"><span>Visit the page</span><b>${fmtInt(traffic)}/day</b></div><div class="wz-bar"><i style="width:100%"></i></div>
+        <div class="wz-fr"><span>Match targeting</span><b>${fmtInt(eligible)}/day</b></div><div class="wz-bar"><i style="width:${pct(eligible)}"></i></div>
+        <div class="wz-fr"><span>Enter the test · ${Number(d.coverage) || 0}% rollout</span><b>${fmtInt(inTest)}/day</b></div><div class="wz-bar"><i class="on" style="width:${pct(inTest)}"></i></div>
+        <div class="wz-split">${vs.map((v, i) => `<i style="flex:${Math.max(0, Number(d.weights[i]) || 0)};background:${color(Math.max(0, v.key.charCodeAt(0) - 65))}"></i>`).join("")}</div>
+        <ul class="wz-vars">${vs.map((v, i) => `<li><span class="dot" style="background:${color(Math.max(0, v.key.charCodeAt(0) - 65))}"></span><b>${esc(v.key)}</b><span class="grow">${esc(v.name || (d.testKind === "url" ? v.url || "URL not set" : ""))}</span><span class="faint">${d.type === "bandit" ? "start " : ""}${Math.round(((Number(d.weights[i]) || 0) / wsum) * 100)}% · ~${fmtInt(inTest * (Number(d.weights[i]) || 0) / wsum)}/day</span></li>`).join("")}</ul>
+      </div>`;
+    const pm = S.metric(d.primaryMetric);
+    const pe = powerEstimate(d);
+    const row = pe?.rows.find((r) => Math.abs(r.mde - d.plannedMde) < 1e-9);
+    const fits = row && row.days <= d.stopAfterDays;
+    const checks = [
+      ["Name", !!d.name],
+      ["Page and variants", !!p && vs.length >= 2],
+      ["Targeting", true],
+      ["Primary metric", !!pm],
+      ["Plan fits the duration", !!fits],
+    ];
+    const done = checks.filter((c) => c[1]).length;
+    return `<div class="wz-card">
+      <div class="wz-eyebrow">Live preview</div>
+      <div class="wz-title">${esc(d.name || "Untitled experiment")}</div>
+      <div class="wz-badges"><span class="badge ${d.type === "bandit" ? "blue" : ""}">${d.type === "bandit" ? "Multi-armed bandit" : "A/B test"}</span><span class="badge">${d.testKind === "url" ? "URL vs URL" : "Original vs variant"}</span></div>
+      ${d.hypothesis ? `<p class="wz-hyp">${esc(d.hypothesis)}</p>` : ""}
+      <div class="wz-sec"><div class="wz-h">Traffic</div>${flow}</div>
+      <div class="wz-sec"><div class="wz-h">Decides the winner</div>${pm ? `<div class="wz-metric">${esc(pm.name)}</div>` : `<div class="wz-empty">Choose a primary metric in step 4.</div>`}
+        ${d.guardrailMetrics.length ? `<div class="wz-guards">${d.guardrailMetrics.map((m) => `<span class="wz-g">${esc(S.metric(m)?.name || m)} <b>≤ ${Math.round((d.guardrailCutoffs?.[m] ?? S.metric(m)?.guardrailCutoff ?? 0.02) * 1000) / 10}%</b></span>`).join("")}</div>` : ""}</div>
+      <div class="wz-sec"><div class="wz-h">Duration</div>${!pe ? `<div class="wz-empty">Appears once a page and primary metric are set.</div>` : `<div class="wz-dur ${fits ? "ok" : "short"}"><b>${d.stopAfterDays / 7} week${d.stopAfterDays === 7 ? "" : "s"}</b> to detect a ${fmtPct(d.plannedMde, 0)} lift<div>${fits ? `Enough: needs about ${row.days} days` : `Too short: needs about ${row.days > 365 ? "a year+" : `${row.days} days`}`}</div></div>`}</div>
+      <div class="wz-ready"><div class="wz-rh"><span>Ready to create</span><b>${done} of ${checks.length}</b></div><div class="wz-meter"><i style="width:${(done / checks.length) * 100}%"></i></div>
+        <ul>${checks.map(([l, ok]) => `<li class="${ok ? "ok" : ""}"><span>${ok ? "✓" : ""}</span>${l}</li>`).join("")}</ul></div>
+    </div>`;
+  };
+  const refreshSide = (form) => {
+    const el = form.querySelector("[data-side]");
+    if (!el || STEPS[step][0] === "review") return;
+    collect(form);
+    el.innerHTML = side();
+  };
+
   const paint = () => {
     const form = formRef;
     const [hq, hs] = STEP_HEAD[STEPS[step][0]];
-    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-main"><div class="step-head"><div class="step-of">Step ${step + 1} of ${STEPS.length}</div><h3>${hq}</h3><p>${hs}</p></div><div class="step-body">${steps[STEPS[step][0]]()}</div></div>`;
+    form.querySelector(".modal-b").innerHTML = stepper() + `<div class="step-main"><div class="step-head"><div class="step-of">Step ${step + 1} of ${STEPS.length}</div><h3>${hq}</h3><p>${hs}</p></div><div class="step-body">${steps[STEPS[step][0]]()}</div></div>${STEPS[step][0] === "review" ? "" : `<aside class="wz-side" data-side>${side()}</aside>`}`;
+    form.querySelector(".modal-b").classList.toggle("no-side", STEPS[step][0] === "review");
+    if (!form.dataset.sideWired) {
+      form.dataset.sideWired = "1";
+      let tmr = null;
+      const later = () => { clearTimeout(tmr); tmr = setTimeout(() => refreshSide(form), 120); };
+      form.addEventListener("input", later);
+      form.addEventListener("change", later);
+    }
     form.querySelector(".modal-f").innerHTML = footer();
-    form.querySelector("#modal-title").textContent = "New experiment";
+    form.querySelector("#modal-title").textContent = d.name ? `New experiment · ${d.name}` : "New experiment";
     wire(form);
     form.querySelector(".modal-b").scrollTop = 0;
     form.querySelector(".step-body input:not([type=hidden]):not([disabled]):not([type=radio]), .step-body select, .step-body textarea")?.focus();
