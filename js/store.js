@@ -222,6 +222,18 @@ export const exp = (id) => state.experiments.find((e) => e.id === id);
 export const metric = (id) => state.metrics.find((m) => m.id === id);
 export const canEdit = () => state.role !== "viewer";
 export const holdout = (id) => state.holdouts.find((h) => h.id === id);
+// Everything that uses a metric. A metric in use can never be deleted.
+export function metricUsage(id) {
+  const experiments = state.experiments.filter((e) => [e.primaryMetric, e.activationMetric, ...(e.secondaryMetrics || []), ...(e.guardrailMetrics || [])].includes(id));
+  const holdouts = (state.holdouts || []).filter((h) => (h.metrics || []).includes(id));
+  return { experiments, holdouts, count: experiments.length + holdouts.length };
+}
+export function usageText(u) {
+  const parts = [];
+  if (u.experiments.length) parts.push(`${u.experiments.length} experiment${u.experiments.length === 1 ? "" : "s"}`);
+  if (u.holdouts.length) parts.push(`${u.holdouts.length} holdout${u.holdouts.length === 1 ? "" : "s"}`);
+  return parts.join(" and ");
+}
 export const report = (id) => state.reports.find((r) => r.id === id);
 export const settings = () => state.settings;
 

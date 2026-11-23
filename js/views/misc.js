@@ -6,15 +6,22 @@ import * as C from "../metric-catalog.js";
 
 export function renderMetrics() {
   const st = S.get();
-  const used = (id) => st.experiments.filter((e) => e.primaryMetric === id || e.secondaryMetrics.includes(id) || e.guardrailMetrics.includes(id) || e.activationMetric === id).length;
   return `<div class="page-head"><div><h1>Metrics</h1><div class="sub">What experiments measure. ${st.metrics.length} metrics.</div></div>
     <button type="button" class="btn primary lg" data-act="metric-new" ${S.canEdit() ? "" : "disabled"}>${icon.plus()} New metric</button></div>
   <div class="card"><div class="table-wrap"><table class="t" style="min-width:860px"><thead><tr><th>Metric</th><th>Group</th><th>Type</th><th>Goal</th><th>Window</th><th class="num">Used in</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
   ${st.metrics.map((m) => `<tr><td><a class="exp-name" href="#/metric/${m.id}">${esc(m.name)}</a><div class="small" style="margin:2px 0 0">${esc(m.desc || "")}${m.requires === "leadForm" ? " · needs a page with a lead form" : ""}</div></td><td>${esc(m.group)}</td>
     <td>${esc(C.kindLabel(m))}<div class="small" style="margin:2px 0 0">${esc(C.countsLabel(m))}${C.countsLabel(m) ? " · " : ""}baseline ${m.type === "binomial" ? fmtPct(m.base, m.base < 0.1 ? 2 : 1) : `${m.unit === "₹" ? "₹" + Math.round(m.base).toLocaleString("en-IN") : m.base + (m.unit || "")}`}</div></td><td>${m.higherIsBetter === false ? "Lower is better" : "Higher is better"}</td><td>${m.windowHours ? `${m.windowHours >= 48 ? `${Math.round(m.windowHours / 24)} days` : `${m.windowHours}h`}` : "No limit"}</td>
-    <td class="num">${used(m.id)} experiment${used(m.id) === 1 ? "" : "s"}</td>
-    <td><div class="actions"><button type="button" class="btn xs" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>Edit</button>${m.custom && S.canEdit() ? `<button type="button" class="btn xs" data-act="metric-delete" data-mid="${m.id}" ${used(m.id) ? 'disabled title="In use by an experiment"' : ""}>Delete</button>` : ""}</div></td></tr>`).join("")}
+    <td class="num">${(() => { const u = S.metricUsage(m.id); return u.count ? esc(S.usageText(u)) : `<span class="faint">Not used</span>`; })()}</td>
+    <td><div class="actions"><button type="button" class="btn xs" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>Edit</button>${m.custom && S.canEdit() ? deleteBtn(m, "xs") : ""}</div></td></tr>`).join("")}
   </tbody></table></div></div>`;
+}
+
+// Delete is offered only for custom metrics, and blocked while anything uses the metric.
+function deleteBtn(m, size) {
+  const u = S.metricUsage(m.id);
+  return u.count
+    ? `<button type="button" class="btn ${size}" aria-disabled="true" title="Used by ${esc(S.usageText(u))}. A metric in use can't be deleted." data-act="metric-delete" data-mid="${m.id}">Delete</button>`
+    : `<button type="button" class="btn ${size}" data-act="metric-delete" data-mid="${m.id}">Delete</button>`;
 }
 
 export function renderMetric(id) {
@@ -23,7 +30,8 @@ export function renderMetric(id) {
   const st = S.get();
   const exps = st.experiments.filter((e) => [e.primaryMetric, ...e.secondaryMetrics, ...e.guardrailMetrics, e.activationMetric].includes(m.id));
   return `<div class="crumbs"><a href="#/metrics">Metrics</a></div>
-    <div class="page-head"><div><h1 style="font-size:28px">${esc(m.name)}</h1><div class="sub">${esc(m.desc || "")}</div></div><button type="button" class="btn sm" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>${icon.edit()} Edit</button></div>
+    <div class="page-head"><div><h1 style="font-size:28px">${esc(m.name)}</h1><div class="sub">${esc(m.desc || "")}</div></div><div class="row" style="gap:8px">${m.custom && S.canEdit() ? deleteBtn(m, "sm") : ""}<button type="button" class="btn sm" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>${icon.edit()} Edit</button></div></div>
+    ${(() => { const u = S.metricUsage(m.id); return u.count ? `<p class="hint" style="margin:-12px 0 20px">Used by ${esc(S.usageText(u))}, so it can't be deleted.${m.custom ? "" : " Built-in metrics can't be deleted."}</p>` : m.custom ? "" : `<p class="hint" style="margin:-12px 0 20px">Built-in metrics can't be deleted.</p>`; })()}
     <div class="grid2"><section class="card pad"><h2>Definition</h2><dl class="kv">
       <dt>Type</dt><dd>${esc(C.kindLabel(m))}</dd>
       ${m.def ? `<dt>Counts</dt><dd>${esc(C.countsLabel(m))}</dd>` : ""}
@@ -322,8 +330,29 @@ Object.assign(acts, {
     S.save();
   },
   "metric-delete": (el) => {
-    const st = S.get();
-    st.metrics = st.metrics.filter((m) => m.id !== el.dataset.mid);
-    S.save();
+    const m = S.metric(el.dataset.mid);
+    if (!m) return;
+    const u = S.metricUsage(m.id);
+    if (u.count || !m.custom) {
+      // Never delete a metric in use (any experiment, in any state, or a holdout).
+      openModal({
+        title: `Can't delete ${m.name}`, ic: icon.warn(18), tone: "amber",
+        body: m.custom
+          ? `<p style="margin-top:0">It's used by ${esc(S.usageText(u))}. Remove it from these first:</p><ul>${[...u.experiments.map((e) => `<li><a href="#/experiment/${e.id}/overview" data-act="modal-close-nav">${esc(e.name)}</a> <span class="faint">· ${e.archived ? "archived" : esc(e.status)}</span></li>`), ...u.holdouts.map((h) => `<li><a href="#/holdout/${h.id}" data-act="modal-close-nav">${esc(h.name)}</a> <span class="faint">· holdout</span></li>`)].join("")}</ul><p class="hint">Stopped and archived experiments count too, so their results stay readable.</p>`
+          : `<p style="margin-top:0">Built-in metrics can't be deleted.</p>`,
+        footer: `<button type="button" class="btn sm primary" data-act="modal-close">OK</button>`,
+      });
+      return;
+    }
+    confirmModal({
+      title: `Delete ${m.name}?`, danger: true, tone: "red", confirm: "Delete",
+      text: "No experiment or holdout uses it. It will be removed from the metric pickers.",
+      onConfirm: () => {
+        S.get().metrics = S.get().metrics.filter((x) => x.id !== m.id);
+        S.save();
+        toast(`Deleted ${m.name}`);
+        if (location.hash.startsWith("#/metric/")) location.hash = "#/metrics";
+      },
+    });
   },
 });
