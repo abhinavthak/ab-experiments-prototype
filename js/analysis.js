@@ -1,7 +1,7 @@
 // Turns simulated data into results, health and a decision for one experiment.
 import * as S from "./store.js";
 import * as Sim from "./sim.js";
-import { compare, verdict, srm, adjustPValues, chanceBest, moments } from "./stats.js";
+import { compare, verdict, srm, adjustPValues, chanceBest, moments, sampleSizePerVariant } from "./stats.js";
 import { DAY, daysBetween, rng, hash } from "./util.js";
 
 // Activation metric: only visitors who did it count (approximation: the
@@ -142,6 +142,11 @@ export function analyze(e, { device = "all", phase = null, baseline = 0 } = {}) 
       else if (winners.length && guardOk(winners[0])) {
         const w = winners.sort((x, y) => y.r.lift - x.r.lift)[0];
         decision = { kind: "ship", label: "Ship now", text: `${w.v.key} is ahead on the primary metric`, best: w };
+        // Planned sample is a warning, never a gate: Ship now needs only the minimum run time.
+        const k = Math.max(2, vs.length);
+        const planned = sampleSizePerVariant(primary.metric, e.plannedMde ?? 0.1, { alpha: (1 - st.ciLevel) / (k - 1) });
+        const have = Math.min(...tot.map((v) => v.n));
+        if (planned && have < planned) decision.warn = `Below the planned sample: ${Math.round((have / planned) * 100)}% of ${planned.toLocaleString("en-IN")} visitors per variant. The real lift may be smaller than it looks; running longer makes it more reliable.`;
       } else if (winners.length) decision = { kind: "review", label: "Review guardrails", text: `${winners[0].v.key} wins the primary metric but fails a guardrail`, best: winners[0] };
       else if (allLost) decision = { kind: "rollback", label: "Roll back now", text: "Every variant is worse than Control", best };
       else decision = { kind: "running", label: daysLeft != null ? `${daysLeft} days left` : "Keep running", text: "No variant is clearly better yet", best };

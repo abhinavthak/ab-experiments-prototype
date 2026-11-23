@@ -1,6 +1,6 @@
 import * as S from "../store.js";
 import { acts } from "../actions.js";
-import { icon, openModal, closeModal, confirmModal } from "../ui.js";
+import { icon, openModal, closeModal, confirmModal, callout } from "../ui.js";
 import { esc, fmtPct, fmtDate, toast, uid, rng, hash } from "../util.js";
 import * as C from "../metric-catalog.js";
 
@@ -31,6 +31,7 @@ export function renderMetric(id) {
   const exps = st.experiments.filter((e) => [e.primaryMetric, ...e.secondaryMetrics, ...e.guardrailMetrics, e.activationMetric].includes(m.id));
   return `<div class="crumbs"><a href="#/metrics">Metrics</a></div>
     <div class="page-head"><div><h1 style="font-size:28px">${esc(m.name)}</h1><div class="sub">${esc(m.desc || "")}</div></div><div class="row" style="gap:8px">${m.custom && S.canEdit() ? deleteBtn(m, "sm") : ""}<button type="button" class="btn sm" data-act="metric-edit" data-mid="${m.id}" ${S.canEdit() ? "" : "disabled"}>${icon.edit()} Edit</button></div></div>
+    ${(() => { const run = S.metricUsage(m.id).experiments.filter((e) => e.status === "running" && !e.archived); return run.length ? `<p class="hint" style="margin:-12px 0 8px">Definition locked: used by ${run.length} running experiment${run.length === 1 ? "" : "s"}. It can change again once ${run.length === 1 ? "it stops" : "they stop"}.</p>` : ""; })()}
     ${(() => { const u = S.metricUsage(m.id); return u.count ? `<p class="hint" style="margin:-12px 0 20px">Used by ${esc(S.usageText(u))}, so it can't be deleted.${m.custom ? "" : " Built-in metrics can't be deleted."}</p>` : m.custom ? "" : `<p class="hint" style="margin:-12px 0 20px">Built-in metrics can't be deleted.</p>`; })()}
     <div class="grid2"><section class="card pad"><h2>Definition</h2><dl class="kv">
       <dt>Type</dt><dd>${esc(C.kindLabel(m))}</dd>
@@ -66,6 +67,9 @@ function metricModal(m) {
   };
   if (st.def.kind === "single" && !st.def.ev) st.def.ev = C.ref("lead:form_submit");
   const lockKind = !isNew;
+  // A metric used by a running test can't have its definition changed (same rule as guardrail cutoffs).
+  const runningUsers = isNew ? [] : S.metricUsage(m.id).experiments.filter((e) => e.status === "running" && !e.archived);
+  const locked = runningUsers.length > 0;
   const lead = () => (st.def.kind === "ratio" ? st.def.num : st.def.ev);
   const auto = () => { const src = C.srcOf(lead()), e = C.evOf(lead()); return { group: e?.group || src?.group || "Clicks", window: src?.window || (st.def.kind === "ratio" && C.srcOf(st.def.den)?.window) || 72, lower: !!(src?.lower || e?.lower), minSample: 100, maxChange: 0.5, guardCut: 0.02 }; };
   const setting = (k) => (st.more[k] !== undefined ? st.more[k] : auto()[k]);
@@ -101,13 +105,13 @@ function metricModal(m) {
     const W = 300, H = 52, max = Math.max(...vals), bw = W / vals.length;
     return `<svg viewBox="0 0 ${W} ${H}" class="mm-spark" role="img" aria-label="Last 28 days">${vals.map((v, i) => { const h = (v / max) * (H - 4); return `<rect x="${i * bw + 1}" y="${H - h}" width="${bw - 2}" height="${h}" rx="1.5"/>`; }).join("")}</svg>`;
   };
-  const eventSelect = (id, cur) => `<select id="${id}" class="inp" data-mm="${id}">${Object.entries(C.SOURCES).filter(([, src]) => !(src.averageOnly && st.def.kind === "ratio")).map(([k, src]) => `<optgroup label="${esc(src.label)}">${Object.entries(src.events).map(([e, ev]) => `<option value="${k}:${e}" ${`${k}:${e}` === cur ? "selected" : ""}>${esc(ev.label)}${ev.cpv ? "" : " · no data yet"}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  const eventSelect = (id, cur) => `<select id="${id}" class="inp" data-mm="${id}" ${locked ? "disabled" : ""}>${Object.entries(C.SOURCES).filter(([, src]) => !(src.averageOnly && st.def.kind === "ratio")).map(([k, src]) => `<optgroup label="${esc(src.label)}">${Object.entries(src.events).map(([e, ev]) => `<option value="${k}:${e}" ${`${k}:${e}` === cur ? "selected" : ""}>${esc(ev.label)}${ev.cpv ? "" : " · no data yet"}</option>`).join("")}</optgroup>`).join("")}</select>`;
   const refFor = (w) => (w === "ev" ? st.def.ev : w === "num" ? st.def.num : st.def.den);
   const filterRow = (w) => {
     const r = refFor(w), e = C.evOf(r), props = Object.keys(e?.props || {});
     if (!props.length) return "";
-    if (!r.prop) return `<button type="button" class="link-btn mm-addf" data-mm-addf="${w}">+ Add filter</button>`;
-    return `<div class="mm-filter"><span>where</span><select class="inp" data-mm="${w}-prop" aria-label="Property">${props.map((x) => `<option ${x === r.prop ? "selected" : ""}>${x}</option>`).join("")}</select><span>is</span><select class="inp" data-mm="${w}-val" aria-label="Value">${Object.keys(e.props[r.prop]).map((x) => `<option ${x === r.val ? "selected" : ""}>${x}</option>`).join("")}</select><button type="button" class="btn xs ghost" data-mm-rmf="${w}" aria-label="Remove filter">${icon.x(14)}</button></div>`;
+    if (!r.prop) return locked ? "" : `<button type="button" class="link-btn mm-addf" data-mm-addf="${w}">+ Add filter</button>`;
+    return `<div class="mm-filter"><span>where</span><select class="inp" data-mm="${w}-prop" aria-label="Property" ${locked ? "disabled" : ""}>${props.map((x) => `<option ${x === r.prop ? "selected" : ""}>${x}</option>`).join("")}</select><span>is</span><select class="inp" data-mm="${w}-val" aria-label="Value" ${locked ? "disabled" : ""}>${Object.keys(e.props[r.prop]).map((x) => `<option ${x === r.val ? "selected" : ""}>${x}</option>`).join("")}</select>${locked ? "" : `<button type="button" class="btn xs ghost" data-mm-rmf="${w}" aria-label="Remove filter">${icon.x(14)}</button>`}</div>`;
   };
   const seg = (attr, items, cur, disabled) => `<div class="mm-seg" role="radiogroup">${items.map(([v, l]) => `<button type="button" ${attr}="${v}" class="${v === cur ? "on" : ""}" ${disabled ? "disabled" : ""}>${esc(l)}</button>`).join("")}</div>`;
   const body = () => {
@@ -115,12 +119,13 @@ function metricModal(m) {
     const e = !ratio ? C.evOf(st.def.ev) : null;
     return `<div class="mm">
       ${isNew ? `<div class="mm-tpl"><span>Start from</span>${Object.entries(TEMPLATES).map(([k, t]) => `<button type="button" class="${st.active === k ? "on" : ""}" data-mm-tpl="${k}">${esc(t.label)}</button>`).join("")}</div>` : ""}
+      ${locked ? callout("warn", `<b>Definition locked.</b> ${runningUsers.length === 1 ? `“${esc(runningUsers[0].name)}” is` : `${runningUsers.length} running experiments are`} running with this metric, so what it counts can't change until ${runningUsers.length === 1 ? "it stops" : "they stop"}. You can still rename it. To measure differently, create a new metric.`) : ""}
       <div class="mm-grid"><div class="mm-form">
         <div class="field"><label for="mm-name">Name</label><input id="mm-name" class="inp" value="${esc(st.name)}" placeholder="e.g. V2L (visit to lead)" autocomplete="off"></div>
         <div class="field"><span class="label">What to measure</span>${seg("data-mm-kind", [["single", "Single event"], ["ratio", "Ratio"]], st.def.kind, lockKind)}${lockKind ? `<div class="hint">Locked after the first save.</div>` : ""}</div>
         ${ratio
           ? `<div class="field"><label for="mm-num">Count</label>${eventSelect("mm-num", st.def.num.key)}${filterRow("num")}</div><div class="mm-div">÷</div><div class="field"><label for="mm-den">Divided by</label>${eventSelect("mm-den", st.def.den.key)}${filterRow("den")}</div>`
-          : `<div class="field"><label for="mm-ev">Event</label>${eventSelect("mm-ev", st.def.ev.key)}${filterRow("ev")}</div>${e?.value && !C.srcOf(st.def.ev).averageOnly ? `<div class="field"><span class="label">Count as</span>${seg("data-mm-measure", [["count", "% of visitors who did it"], ["mean", `Average ${Object.keys(e.value)[0]} per visitor`]], measure())}</div>` : ""}`}
+          : `<div class="field"><label for="mm-ev">Event</label>${eventSelect("mm-ev", st.def.ev.key)}${filterRow("ev")}</div>${e?.value && !C.srcOf(st.def.ev).averageOnly ? `<div class="field"><span class="label">Count as</span>${seg("data-mm-measure", [["count", "% of visitors who did it"], ["mean", `Average ${Object.keys(e.value)[0]} per visitor`]], measure(), locked)}</div>` : ""}`}
         ${!r.has ? `<label class="check"><input type="checkbox" data-mm="isNew" ${st.isNew ? "checked" : ""}><span><span class="t1">New event, not live yet</span><span class="t2">Save without data; the baseline is set once data arrives</span></span></label>` : ""}
         <p class="hint mm-auto">Set automatically: ${esc(setting("group"))} group, ${setting("window")} h window${setting("lower") ? ", lower is better" : ""}.</p>
       </div>
@@ -133,6 +138,12 @@ function metricModal(m) {
   const save = () => {
     const r = evalNow();
     if (problems(r).length) return;
+    if (locked) {
+      Object.assign(m, { name: st.name.trim(), desc: st.desc.trim() });
+      S.save();
+      closeModal();
+      return toast("Name saved. The definition stays locked while tests run.", "good");
+    }
     const def = st.def.kind === "ratio" ? { kind: "ratio", num: st.def.num, den: st.def.den } : { kind: "single", ev: st.def.ev, measure: measure() };
     const usesLead = [def.ev, def.num, def.den].some((x) => x && x.key.startsWith("lead:"));
     const rec = {
@@ -168,6 +179,7 @@ function metricModal(m) {
         let b;
         if ((b = t("[data-mm-tpl]"))) { const tp = TEMPLATES[b.dataset.mmTpl]; st.active = b.dataset.mmTpl; st.name = tp.name; st.def = { ...blankDef(), ...structuredClone(tp.def) }; st.more = {}; return paint(); }
         if ((b = t("[data-mm-kind]")) && !b.disabled) { st.def.kind = b.dataset.mmKind; if (st.def.kind === "ratio" && C.srcOf(st.def.num)?.averageOnly) st.def.num = C.ref("lead:form_submit"); touch(); return paint(); }
+        if (locked && t("[data-mm-measure], [data-mm-addf], [data-mm-rmf]")) return;
         if ((b = t("[data-mm-measure]"))) { st.def.measure = b.dataset.mmMeasure; touch(); return paint(); }
         if ((b = t("[data-mm-addf]"))) { const r = refFor(b.dataset.mmAddf), e = C.evOf(r), p0 = Object.keys(e.props)[0]; r.prop = p0; r.val = Object.keys(e.props[p0])[0]; touch(); return paint(); }
         if ((b = t("[data-mm-rmf]"))) { const r = refFor(b.dataset.mmRmf); r.prop = ""; r.val = ""; touch(); return paint(); }
