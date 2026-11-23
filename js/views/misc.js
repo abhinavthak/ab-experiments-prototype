@@ -54,7 +54,7 @@ function metricModal(m) {
     desc: m?.desc || "",
     def: m?.def ? { ...blankDef(), ...structuredClone(m.def) } : blankDef(),
     more: m ? { group: m.group, window: m.windowHours ?? 72, lower: m.higherIsBetter === false, minSample: m.minSample ?? 100, maxChange: m.maxChange ?? 0.5, guardCut: m.guardrailCutoff ?? 0.02 } : {},
-    isNew: false, moreOpen: !isNew, active: "",
+    isNew: false, active: "",
   };
   if (st.def.kind === "single" && !st.def.ev) st.def.ev = C.ref("lead:form_submit");
   const lockKind = !isNew;
@@ -113,18 +113,8 @@ function metricModal(m) {
         ${ratio
           ? `<div class="field"><label for="mm-num">Count</label>${eventSelect("mm-num", st.def.num.key)}${filterRow("num")}</div><div class="mm-div">÷</div><div class="field"><label for="mm-den">Divided by</label>${eventSelect("mm-den", st.def.den.key)}${filterRow("den")}</div>`
           : `<div class="field"><label for="mm-ev">Event</label>${eventSelect("mm-ev", st.def.ev.key)}${filterRow("ev")}</div>${e?.value && !C.srcOf(st.def.ev).averageOnly ? `<div class="field"><span class="label">Count as</span>${seg("data-mm-measure", [["count", "% of visitors who did it"], ["mean", `Average ${Object.keys(e.value)[0]} per visitor`]], measure())}</div>` : ""}`}
-        <details class="adv mm-more" ${st.moreOpen ? "open" : ""}><summary>More options <span class="opt">· ${esc(setting("group"))} · ${setting("window")} h window${setting("lower") ? " · lower is better" : ""}</span></summary>
-          <div class="mm-more-grid">
-            <div class="field"><label for="mm-group">Group</label><select id="mm-group" class="inp" data-mm="group">${S.METRIC_GROUPS.map((g) => `<option ${g === setting("group") ? "selected" : ""}>${g}</option>`).join("")}</select></div>
-            <div class="field"><label for="mm-window">Window (hours)</label><input id="mm-window" class="inp" type="number" min="0" max="720" data-mm="window" value="${setting("window")}"></div>
-            <div class="field"><label for="mm-dir">Direction</label><select id="mm-dir" class="inp" data-mm="lower"><option value="0" ${!setting("lower") ? "selected" : ""}>Higher is better</option><option value="1" ${setting("lower") ? "selected" : ""}>Lower is better</option></select></div>
-            <div class="field"><label for="mm-min">Minimum data</label><input id="mm-min" class="inp" type="number" min="0" data-mm="minSample" value="${setting("minSample")}"></div>
-            <div class="field"><label for="mm-flag">Flag changes above (%)</label><input id="mm-flag" class="inp" type="number" min="1" data-mm="maxChange" value="${Math.round(setting("maxChange") * 100)}"></div>
-            <div class="field"><label for="mm-gc">Default guardrail cutoff (%)</label><input id="mm-gc" class="inp" type="number" min="0" step="0.5" data-mm="guardCut" value="${Math.round(setting("guardCut") * 1000) / 10}"></div>
-          </div>
-          <div class="field"><label for="mm-desc">Description <span class="opt">· optional</span></label><input id="mm-desc" class="inp" value="${esc(st.desc)}" placeholder="How to read it"></div>
-          ${!r.has ? `<label class="check"><input type="checkbox" data-mm="isNew" ${st.isNew ? "checked" : ""}><span><span class="t1">New event, not live yet</span><span class="t2">Save without data; the baseline is set once data arrives</span></span></label>` : ""}
-        </details>
+        ${!r.has ? `<label class="check"><input type="checkbox" data-mm="isNew" ${st.isNew ? "checked" : ""}><span><span class="t1">New event, not live yet</span><span class="t2">Save without data; the baseline is set once data arrives</span></span></label>` : ""}
+        <p class="hint mm-auto">Set automatically: ${esc(setting("group"))} group, ${setting("window")} h window${setting("lower") ? ", lower is better" : ""}.</p>
       </div>
       <aside class="mm-card"><div class="eyebrow">Last 28 days</div>
         ${r.has ? `<div class="mm-big">${b.big}${b.note ? `<span>${esc(b.note)}</span>` : ""}</div>${spark(r)}<div class="mm-small">${b.small}</div>` : `<div class="mm-empty">No data in the last 28 days.</div>`}
@@ -174,7 +164,6 @@ function metricModal(m) {
         if ((b = t("[data-mm-addf]"))) { const r = refFor(b.dataset.mmAddf), e = C.evOf(r), p0 = Object.keys(e.props)[0]; r.prop = p0; r.val = Object.keys(e.props[p0])[0]; touch(); return paint(); }
         if ((b = t("[data-mm-rmf]"))) { const r = refFor(b.dataset.mmRmf); r.prop = ""; r.val = ""; touch(); return paint(); }
       });
-      form.addEventListener("toggle", (ev) => { if (ev.target.matches?.(".mm-more")) st.moreOpen = ev.target.open; }, true);
       form.addEventListener("change", (ev) => {
         const el = ev.target, k = el.dataset.mm;
         if (!k) return;
