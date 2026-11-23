@@ -224,7 +224,18 @@ function ciBar(d, verdict, span, mode, metric) {
   if (!d) return "";
   const pos = (x) => `${((x + span) / (2 * span)) * 100}%`;
   const lo = Math.max(-span, d.lo), hi = Math.min(span, d.hi);
-  return `<div class="ci" aria-label="Interval ${fmtDiff(d.lo, mode, metric)} to ${fmtDiff(d.hi, mode, metric)}"><div class="axis"></div><div class="zero" style="left:50%"></div><div class="bar ${verdict}" style="left:${pos(lo)};width:calc(${pos(hi)} - ${pos(lo)})"></div><div class="pt" style="left:calc(${pos(Math.max(-span, Math.min(span, d.pt)))} - 1px)"></div></div><div class="small" style="margin-top:2px">${fmtDiff(d.lo, mode, metric)} to ${fmtDiff(d.hi, mode, metric)}</div>`;
+  return `<div class="ci" aria-label="Interval ${fmtDiff(d.lo, mode, metric)} to ${fmtDiff(d.hi, mode, metric)}"><div class="axis"></div><div class="zero" style="left:50%"></div><div class="bar ${verdict}" style="left:${pos(lo)};width:calc(${pos(hi)} - ${pos(lo)})"></div><div class="pt" style="left:calc(${pos(Math.max(-span, Math.min(span, d.pt)))} - 1px)"></div></div><div class="small range-words ${verdict}" style="margin-top:2px">${rangeWords(d, mode, metric, verdict)}</div>`;
+}
+// The interval in words: which way it points, and how far.
+// A call (95% chance to beat) can come before the 95% range clears zero;
+// then it says "Probably" so the badge and the words never disagree.
+function rangeWords(d, mode, metric, verdict) {
+  const m = (x) => fmtDiff(Math.abs(x), mode, metric).replace(/^\+/, "");
+  if (d.lo > 0) return `Likely ${m(d.lo)} to ${m(d.hi)} higher`;
+  if (d.hi < 0) return `Likely ${m(d.hi)} to ${m(d.lo)} lower`;
+  const span = `${m(d.lo)} lower to ${m(d.hi)} higher`;
+  if (verdict === "won" || verdict === "lost") return `Probably ${d.pt > 0 ? "higher" : "lower"}: ${span}`;
+  return `Unclear: ${span}`;
 }
 const fmtP = (p) => (p < 0.001 ? "<0.001" : p.toFixed(3));
 
@@ -240,7 +251,7 @@ export function metricTable(e, block, engine, ui, { compact = false, scale = 1 }
   const head = { relative: "Change", absolute: "Absolute change", scaled: metric.type === "binomial" ? "Scaled impact · conversions/day at 100%" : "Absolute change" }[mode];
   return `<div class="table-wrap"><table class="t ${compact ? "compact" : ""}" style="min-width:${bayes ? 860 : 780}px">
     <thead><tr><th>Variant</th><th class="num">Visitors</th><th class="num">${metric.type === "binomial" ? "Conversions" : "Average"}</th><th class="num">${metric.type === "binomial" ? "Conv. rate" : "Value"}</th>
-      <th>${head} vs ${esc(base?.v.key || "A")} ${metric.higherIsBetter === false ? "<span class='faint'>(lower is better)</span>" : ""}</th>
+      <th title="Best estimate on top; below it, the range the real change most likely falls in">${head} vs ${esc(base?.v.key || "A")} ${metric.higherIsBetter === false ? "<span class='faint'>(lower is better)</span>" : ""}</th>
       <th class="num">${bayes ? "Chance to beat" : corr ? "p-value (adjusted)" : "p-value"}</th>${bayes ? `<th class="num" title="Expected relative loss if you ship this variant and it's actually worse">Risk</th>` : ""}</tr></thead>
     <tbody>${rows.map(({ v, s, r, verdict, enough, suspicious }, k) => {
       const d = ds[k];
@@ -390,7 +401,8 @@ export function resultsBody(e, ui, { report = false } = {}) {
   ${decision}
   ${a.primary ? `<section class="card"><div class="toolbar"><div><b>Primary metric · ${esc(metric.name)}</b><div class="small" style="margin:2px 0 0">${a.engine === "bayesian" ? `Bayesian · ${fmtPct(S.settings().ciLevel, 0)} credible interval` : `Frequentist · ${fmtPct(S.settings().ciLevel, 0)} confidence interval${e.sequential ? " · sequential" : ""}${S.settings().correction !== "none" ? ` · ${S.settings().correction === "holm" ? "Holm-Bonferroni" : "Benjamini-Hochberg"} correction` : ""}`}${e.cuped ? " · CUPED" : ""}${e.activationMetric ? ` · activated by ${esc(S.metric(e.activationMetric)?.name)}` : ""}</div></div>
       ${resultsControls(e, ui, a)}</div>
-    ${metricTable(e, a.primary, a.engine, ui, { scale })}</section>
+    ${metricTable(e, a.primary, a.engine, ui, { scale })}
+    <div class="read-note"><b>How to read Change:</b> the big number is the best estimate. The line under it is where the real change most likely sits (${fmtPct(S.settings().ciLevel, 0)} ${a.engine === "bayesian" ? "credible" : "confidence"} interval). "Probably" means the chance to beat is past 95% but the range still touches the other side. "Unclear" means it could still go either way.</div></section>
   ${dimensionBlock(e, ui, a)}
   ${chartFor(e, ui, a)}` : callout("warn", "No primary metric is set, so there's nothing to decide on.")}
   ${a.secondary.length ? `<section class="card"><div class="toolbar"><b>Secondary metrics</b></div>${a.secondary.map((b) => `<div style="padding:12px 20px 0" class="eyebrow">${esc(b.metric.name)}</div>${metricTable(e, b, a.engine, ui, { compact: true, scale })}`).join("")}</section>` : ""}

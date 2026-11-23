@@ -807,3 +807,10 @@ select.inp:disabled { cursor: not-allowed; }
 .mm-why .ok { color: var(--green-fg); }
 .decision-warn { display: flex; gap: 6px; align-items: flex-start; margin-top: 8px; font-size: 13px; color: var(--amber-fg); }
 .decision-warn svg { flex: none; margin-top: 2px; }
+
+/* Change column: interval in words */
+.range-words { white-space: nowrap; }
+.range-words.won { color: var(--up); }
+.range-words.lost { color: var(--down); }
+.read-note { font-size: 12.5px; color: var(--text-3); padding: 10px 20px 14px; border-top: 1px solid var(--border); line-height: 1.5; }
+.read-note b { color: var(--text); font-weight: 600; }
